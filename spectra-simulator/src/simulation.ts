@@ -7,7 +7,7 @@ export interface Config { scenarioId: string; environment: EnvironmentKind; ligh
 export interface Entity { id: string; kind: EntityKind; label: string; x: number; y: number; altitude: number; vx: number; vy: number; phase: number; }
 export interface Observation { entityId: string; observedAt: number; status: SensorStatus; confidence: number; source: "SIMULATED RADAR"; note: string; }
 export interface SessionEvent { id: string; time: number; type: "SESSION" | "DETECTION" | "SENSOR" | "OPERATOR" | "ENVIRONMENT"; title: string; detail: string; }
-export interface SessionSnapshot { id: string; startedAt: string; config: Config; duration: number; events: SessionEvent[]; }
+export interface SessionSnapshot { id: string; startedAt: string; config: Config; duration: number; events: SessionEvent[]; entities?: Entity[]; observations?: Record<string, Observation>; tick?: number; }
 
 export const SCENARIOS = [
   { id: "perimeter-watch", name: "Perimeter watch", description: "A routine site watch with authorized and unknown contacts.", count: 5, environment: "perimeter" as const },
@@ -21,7 +21,6 @@ export function createRng(seed: number): () => number {
   let value = (seed >>> 0) || 1;
   return () => { value += 0x6D2B79F5; let t = value; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
 }
-
 export function generateEntities(config: Config): Entity[] {
   const rng = createRng(config.seed);
   const count = Math.max(1, Math.min(30, Math.floor(config.contactCount)));
@@ -33,7 +32,6 @@ export function generateEntities(config: Config): Entity[] {
     return { id: `C-${String(index + 1).padStart(2, "0")}`, kind, label: kind === "authorized" ? "AUTHORIZED" : kind === "unknown" ? "UNRESOLVED" : "SIMULATED THREAT", x: 0.12 + rng() * 0.76, y: 0.12 + rng() * 0.76, altitude: 55 + Math.round(rng() * 180), vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed, phase: rng() * Math.PI * 2 };
   });
 }
-
 export function getObservation(config: Config, entity: Entity, tick: number): Observation {
   const rng = createRng((config.seed ^ (tick * 971) ^ (entity.id.charCodeAt(2) * 131)) >>> 0);
   const lightingPenalty = config.lighting === "night" ? 9 : config.lighting === "dusk" ? 4 : 0;
@@ -46,7 +44,6 @@ export function getObservation(config: Config, entity: Entity, tick: number): Ob
   const intermittent = rng() < dropProbability;
   return { entityId: entity.id, observedAt: tick, status: intermittent ? "INTERMITTENT" : "TRACK", confidence, source: "SIMULATED RADAR", note: intermittent ? "Intermittent synthetic observation" : "Synthetic track observation" };
 }
-
 export function moveEntities(entities: Entity[], tick: number): Entity[] {
   return entities.map((entity) => {
     const step = tick % 2 === 0 ? 1 : 0.65;
