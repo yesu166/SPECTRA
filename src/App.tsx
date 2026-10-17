@@ -10,7 +10,8 @@ import DigitalTwin from "./components/DigitalTwin";
 import AfterActionReview from "./components/AfterActionReview";
 import {
   createEvent, DEFAULT_CONFIG, SCENARIOS, scenarioFor, SimulationSession,
-  type Config, type ContactView, type SessionEvent, type SessionSnapshot,
+  type Config, type ContactClassification, type ConfidenceLevel, type ContactView,
+  type InputMethod, type SessionEvent, type SessionSnapshot, type TraineeAction,
 } from "./simulation";
 
 const STORAGE_KEY = "spectra-simulator-sessions-v1";
@@ -55,15 +56,55 @@ export default function App() {
   useEffect(() => { eventsRef.current = events; }, [events]);
   useEffect(() => { configRef.current = config; }, [config]);
 
-  const record = useCallback((type: SessionEvent["type"], title: string, detail: string, time: number) => {
+  const record = useCallback((
+    type: SessionEvent["type"],
+    title: string,
+    detail: string,
+    time: number,
+    metadata: Partial<Pick<SessionEvent, "action" | "inputMethod" | "confidence" | "classification" | "contactId" | "tick" | "evidenceEventIds">> = {},
+  ) => {
     eventCounter.current += 1;
-    const event = createEvent(type, title, detail, time, `event-${eventCounter.current}`);
+    const event = {
+      ...createEvent(type, title, detail, time, `event-${eventCounter.current}`, metadata.tick ?? tickRef.current, metadata.evidenceEventIds),
+      ...metadata,
+    };
     setEvents((previous) => {
       const next = [...previous, event].slice(-500);
       eventsRef.current = next;
       return next;
     });
   }, []);
+
+  const handleTraineeAction = useCallback((
+    action: TraineeAction,
+    confidence: ConfidenceLevel,
+    inputMethod: InputMethod,
+    classification?: ContactClassification,
+    contactId?: string,
+  ) => {
+    const titles: Record<TraineeAction, string> = {
+      OBSERVE: "Observation acknowledged",
+      REQUEST_MORE_INFO: "Requested more information",
+      REPORT: "Contact reported",
+      ESCALATE: "Concern escalated",
+      AUTHORIZE_RESPONSE: "Abstract response authorised",
+      DEFER: "Decision deferred",
+      CLASSIFY: "Contact classified",
+      SET_CONFIDENCE: "Confidence setting changed",
+    };
+    const methodLabel = inputMethod === "gaze" ? "gaze-and-hold" : inputMethod;
+    const details = [
+      contactId ? `Contact ${contactId}` : "No contact selected",
+      classification ? `classification ${classification.replaceAll("_", " ").toLowerCase()}` : "",
+      `confidence ${confidence.toLowerCase()}`,
+      `input ${methodLabel}`,
+      action === "REQUEST_MORE_INFO" ? "additional sensors are not yet simulated" : "",
+    ].filter(Boolean).join(" · ");
+    record("ACTION", titles[action], details, elapsedRef.current, {
+      action, confidence, inputMethod, classification, contactId, tick: tickRef.current,
+    });
+    setNotice(`ACTION RECORDED · ${titles[action].toUpperCase()}`);
+  }, [record]);
 
   const initialEvents = useCallback((cfg: Config): SessionEvent[] => [
     createEvent("SESSION", "Exercise initialized", `${SCENARIOS.find((item) => item.id === cfg.scenarioId)?.name ?? "Scenario"} · seed ${cfg.seed}`, 0, "event-1"),
@@ -210,7 +251,7 @@ export default function App() {
           </div>
           <div className="view-grid">
             <section className="panel map-panel"><div className="panel-heading"><div><div className="eyebrow">VIEW 01 / TACTICAL AWARENESS</div><h2>Contact map</h2></div><span className="live-label"><span className="live-dot"/>{running?"UPDATING":"STANDBY"}</span></div><TacticalMap contacts={contacts} selectedId={selectedId} onSelect={setSelectedId} lighting={config.lighting}/><div className="legend"><span><i className="legend-dot mint-dot"/> Track</span><span><i className="legend-dot amber-dot"/> Intermittent</span><span><i className="legend-dot rose-dot"/> Observation unavailable</span><span className="legend-note">Status reflects synthetic observations, not identity</span></div></section>
-            <section className="panel twin-panel"><div className="panel-heading"><div><div className="eyebrow">VIEW 02 / DIGITAL TWIN</div><h2>Environment</h2></div><span className="view-tag"><Layers3 size={12}/> 3D VIEW</span></div><DigitalTwin contacts={contacts} config={config} selectedId={selectedId} onSelect={setSelectedId}/><div className="twin-footer"><span><span className="live-dot"/> Last-observed locations only</span><span>LIGHTING: {config.lighting.toUpperCase()}</span><span>VIS: {config.visibility.toUpperCase()}</span></div></section>
+            <section className="panel twin-panel"><div className="panel-heading"><div><div className="eyebrow">VIEW 02 / DIGITAL TWIN</div><h2>Environment</h2></div><span className="view-tag"><Layers3 size={12}/> 3D VIEW</span></div><DigitalTwin contacts={contacts} config={config} selectedId={selectedId} onSelect={setSelectedId} elapsedSeconds={elapsed} onTraineeAction={handleTraineeAction}/><div className="twin-footer"><span><span className="live-dot"/> Last-observed locations only</span><span>LIGHTING: {config.lighting.toUpperCase()}</span><span>VIS: {config.visibility.toUpperCase()}</span></div></section>
           </div>
           <div className="lower-grid">
             <section className="panel contact-panel"><div className="panel-heading"><div><div className="eyebrow">SYNTHETIC SENSOR FEED</div><h2>Contact register</h2></div><span className="count-pill">{contacts.length} CONTACTS</span></div><div className="contact-table-wrap"><table className="contact-table"><thead><tr><th>CONTACT</th><th>OBSERVATION</th><th>CONF.</th><th>ALT.</th><th>SELECT</th></tr></thead><tbody>{contacts.slice(0,8).map((contact) => {const status=contact.status;return <tr key={contact.id} className={selectedId===contact.id?"selected-row":""} onClick={()=>setSelectedId(contact.id)}><td><span className={`entity-dot ${status==="TRACK"?"track":status==="INTERMITTENT"?"intermittent":status==="UNOBSERVED"?"unobserved":"pending"}`}/><strong>{contact.id}</strong><small>{status==="TRACK"?"TRACK OBSERVED":status==="INTERMITTENT"?"INTERMITTENT":status==="UNOBSERVED"?"NO OBSERVATION":"AWAITING OBSERVATION"}</small></td><td><span className={`observation-pill ${status?.toLowerCase()??"pending"}`}>{status??"PENDING"}</span></td><td>{contact.confidence !== undefined ? `${contact.confidence}%` : "—"}</td><td>{contact.altitude !== undefined ? `${contact.altitude} m (observed)` : "—"}</td><td><button className="mini-select" onClick={(event)=>{event.stopPropagation();setSelectedId(contact.id)}}>{selectedId===contact.id?<Check size={13}/>:<Eye size={13}/>}</button></td></tr>})}</tbody></table></div><div className="contact-footer"><span>SELECTION: {selectedId??"NONE"}</span><span>OBSERVATIONS ARE SIMULATED</span></div></section>
