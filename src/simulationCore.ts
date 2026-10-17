@@ -121,7 +121,7 @@ export function generateTruthTracks(config: Config): TruthTrack[] {
     const kindRoll = rng();
     const kind: EntityKind = index === 0 || kindRoll < 0.25 ? "authorized" : kindRoll < 0.69 ? "unknown" : "simulated-threat";
     const angle = rng() * Math.PI * 2;
-    const speed = 0.006 + rng() * 0.012 * (config.difficulty / 3);
+    const speed = 0.065 + rng() * 0.12 * (config.difficulty / 3);
     return {
       id: `C-${String(index + 1).padStart(2, "0")}`,
       kind,
@@ -167,11 +167,13 @@ export function observeTruth(config: Config, track: TruthTrack, tick: number): R
   };
 }
 
-export function moveTruthTracks(tracks: TruthTrack[], tick: number): TruthTrack[] {
+/** Move tracks using deltaSeconds so motion is independent of update frequency.
+ * Velocities use normalized world units per second. */
+export function moveTruthTracks(tracks: TruthTrack[], deltaSeconds: number): TruthTrack[] {
+  const dt = Math.max(0, Math.min(deltaSeconds, 0.1));
   return tracks.map((track) => {
-    const step = tick % 2 === 0 ? 1 : 0.65;
-    let x = track.x + track.vx * step;
-    let y = track.y + track.vy * step;
+    let x = track.x + track.vx * dt;
+    let y = track.y + track.vy * dt;
     let vx = track.vx;
     let vy = track.vy;
     if (x < 0.06 || x > 0.94) vx *= -1;
