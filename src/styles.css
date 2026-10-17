@@ -61,3 +61,5 @@
   .phone-hud-help{font-size:7px}
 }
 @media(prefers-reduced-motion:reduce){.phone-hud-actions button:active,.phone-hud-classify button:active{transform:none}}
+
+.phone-hud-run-controls{display:flex;align-items:center;gap:5px}.phone-hud-run-controls button:first-child{background:#153c31;border-color:#4c8972;color:#d6ffed}.phone-hud-run-controls button:last-child{background:#2a1820;border-color:#68404b;color:#ffc4cb;min-width:48px}
