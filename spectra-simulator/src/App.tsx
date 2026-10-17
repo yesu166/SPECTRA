@@ -15,8 +15,20 @@ import {
 
 const STORAGE_KEY = "spectra-simulator-sessions-v1";
 function loadSessions(): SessionSnapshot[] {
-  try { const value = localStorage.getItem(STORAGE_KEY); return value ? JSON.parse(value) as SessionSnapshot[] : []; }
-  catch { return []; }
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    if (!stored) return [];
+    const parsed = JSON.parse(stored) as Array<Record<string, unknown>>;
+    // Strip truth-bearing fields from sessions created by older builds.
+    const safe = parsed.map((session) => {
+      const copy = { ...session };
+      delete copy.entities;
+      delete copy.observations;
+      return copy as unknown as SessionSnapshot;
+    });
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(safe));
+    return safe;
+  } catch { return []; }
 }
 function timeLabel(seconds: number) { return `${Math.floor(seconds / 60).toString().padStart(2, "0")}:${Math.floor(seconds % 60).toString().padStart(2, "0")}`; }
 
