@@ -9,21 +9,34 @@ import TacticalMap from "./components/TacticalMap";
 import DigitalTwin from "./components/DigitalTwin";
 import AfterActionReview from "./components/AfterActionReview";
 import {
-  createEvent, DEFAULT_CONFIG, generateEntities, getObservation, moveEntities, SCENARIOS,
-  scenarioFor, type Config, type Entity, type Observation, type SessionEvent, type SessionSnapshot,
+  createEvent, DEFAULT_CONFIG, SCENARIOS, scenarioFor, SimulationSession,
+  type Config, type ContactView, type SessionEvent, type SessionSnapshot,
 } from "./simulation";
 
 const STORAGE_KEY = "spectra-simulator-sessions-v1";
 function loadSessions(): SessionSnapshot[] {
-  try { const value = localStorage.getItem(STORAGE_KEY); return value ? JSON.parse(value) as SessionSnapshot[] : []; }
-  catch { return []; }
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    if (!stored) return [];
+    const parsed = JSON.parse(stored) as Array<Record<string, unknown>>;
+    // Strip truth-bearing fields from sessions created by older builds.
+    const safe = parsed.map((session) => {
+      const copy = { ...session };
+      delete copy.entities;
+      delete copy.observations;
+      return copy as unknown as SessionSnapshot;
+    });
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(safe));
+    return safe;
+  } catch { return []; }
 }
 function timeLabel(seconds: number) { return `${Math.floor(seconds / 60).toString().padStart(2, "0")}:${Math.floor(seconds % 60).toString().padStart(2, "0")}`; }
 
 export default function App() {
   const [config, setConfig] = useState<Config>(DEFAULT_CONFIG);
-  const [entities, setEntities] = useState<Entity[]>(() => generateEntities(DEFAULT_CONFIG));
-  const [observations, setObservations] = useState<Record<string, Observation>>({});
+  const engineRef = useRef<SimulationSession | null>(null);
+  if (engineRef.current === null) engineRef.current = new SimulationSession(DEFAULT_CONFIG);
+  const [contacts, setContacts] = useState<ContactView[]>(() => engineRef.current!.getContacts());
   const [selectedId, setSelectedId] = useState<string | null>("C-01");
   const [running, setRunning] = useState(false);
   const [tick, setTick] = useState(0);
@@ -36,12 +49,10 @@ export default function App() {
   const eventsRef = useRef<SessionEvent[]>([]);
   const tickRef = useRef(0);
   const elapsedRef = useRef(0);
-  const entitiesRef = useRef<Entity[]>(entities);
   const configRef = useRef<Config>(config);
   const eventCounter = useRef(0);
 
   useEffect(() => { eventsRef.current = events; }, [events]);
-  useEffect(() => { entitiesRef.current = entities; }, [entities]);
   useEffect(() => { configRef.current = config; }, [config]);
 
   const record = useCallback((type: SessionEvent["type"], title: string, detail: string, time: number) => {
@@ -66,9 +77,11 @@ export default function App() {
     setRunning(false);
     tickRef.current = 0; elapsedRef.current = 0; eventCounter.current = 3;
     setTick(0); setElapsed(0);
-    const generated = generateEntities(cfg);
-    entitiesRef.current = generated; setEntities(generated); setObservations({});
-    setSelectedId(generated[0]?.id ?? null);
+    const engine = new SimulationSession(cfg);
+    engineRef.current = engine;
+    const initialContacts = engine.getContacts();
+    setContacts(initialContacts);
+    setSelectedId(initialContacts[0]?.id ?? null);
     setSessionStarted(new Date().toISOString());
     const log = initialEvents(cfg);
     eventsRef.current = log; setEvents(log);
@@ -81,18 +94,14 @@ export default function App() {
     const cfg = configRef.current;
     tickRef.current += 1; elapsedRef.current += 1;
     const currentTick = tickRef.current;
-    const moved = moveEntities(entitiesRef.current, currentTick);
-    entitiesRef.current = moved; setEntities(moved); setTick(currentTick); setElapsed(elapsedRef.current);
-    const nextObservations: Record<string, Observation> = {};
-    moved.forEach((entity) => { nextObservations[entity.id] = getObservation(cfg, entity, currentTick); });
-    setObservations(nextObservations);
-    if (currentTick % 4 === 1 && moved.length) {
-      const candidate = moved[Math.floor((currentTick * 7 + cfg.seed) % moved.length)];
-      const obs = nextObservations[candidate.id];
-      if (obs.status === "TRACK") record("DETECTION", `Contact observed · ${candidate.id}`, `Synthetic radar observation · confidence ${obs.confidence}% · identity not inferred from sensor alone`, elapsedRef.current);
+    const nextContacts = engineRef.current?.step() ?? [];
+    setContacts(nextContacts); setTick(currentTick); setElapsed(elapsedRef.current);
+    if (currentTick % 4 === 1 && nextContacts.length) {
+      const candidate = nextContacts[Math.floor((currentTick * 7 + cfg.seed) % nextContacts.length)];
+      if (candidate.status === "TRACK") record("DETECTION", `Contact observed · ${candidate.id}`, `Synthetic sensor observation · confidence ${candidate.confidence ?? 0}% · identity not inferred from sensor alone`, elapsedRef.current);
       else record("SENSOR", `Observation gap · ${candidate.id}`, "No observation was available for this simulated tick.", elapsedRef.current);
     }
-    if (currentTick % 12 === 0) record("SENSOR", "Sensor status update", `${Object.values(nextObservations).filter((item) => item.status === "TRACK").length} current tracks · ${Object.values(nextObservations).filter((item) => item.status === "UNOBSERVED").length} unobserved`, elapsedRef.current);
+    if (currentTick % 12 === 0) record("SENSOR", "Sensor status update", `${nextContacts.filter((item) => item.status === "TRACK").length} current tracks · ${nextContacts.filter((item) => item.status === "UNOBSERVED").length} unobserved`, elapsedRef.current);
   }, [record]);
 
   useEffect(() => {
@@ -112,16 +121,16 @@ export default function App() {
     setConfig(next); configRef.current = next; resetScenario(next);
   };
 
-  const selected = entities.find((entity) => entity.id === selectedId) ?? entities[0];
-  const selectedObservation = selected ? observations[selected.id] : undefined;
-  const tracked = Object.values(observations).filter((item) => item.status === "TRACK").length;
-  const intermittent = Object.values(observations).filter((item) => item.status === "INTERMITTENT").length;
-  const unobserved = Object.values(observations).filter((item) => item.status === "UNOBSERVED").length;
+  const selected = contacts.find((contact) => contact.id === selectedId) ?? contacts[0];
+  const selectedObservation = selected;
+  const tracked = contacts.filter((item) => item.status === "TRACK").length;
+  const intermittent = contacts.filter((item) => item.status === "INTERMITTENT").length;
+  const unobserved = contacts.filter((item) => item.status === "UNOBSERVED").length;
   const sensorHealth = Math.max(8, Math.min(100, config.sensorQuality - (config.visibility === "fog" ? 18 : config.visibility === "haze" ? 8 : 0) - (config.lighting === "night" ? 4 : 0)));
   const scenario = SCENARIOS.find((item) => item.id === config.scenarioId) ?? SCENARIOS[0];
 
   const saveSession = () => {
-    const snapshot: SessionSnapshot = { id: `session-${Date.now()}`, startedAt: sessionStarted, config, duration: elapsedRef.current, events: eventsRef.current, entities: entitiesRef.current, observations, tick: tickRef.current };
+    const snapshot: SessionSnapshot = { id: `session-${Date.now()}`, startedAt: sessionStarted, config, duration: elapsedRef.current, events: eventsRef.current, contacts, tick: tickRef.current };
     const next = [snapshot, ...loadSessions()].slice(0, 12);
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(next)); setSessions(next);
@@ -137,23 +146,30 @@ export default function App() {
     eventsRef.current = session.events; setEvents(session.events); eventCounter.current = session.events.length;
     setElapsed(session.duration); elapsedRef.current = session.duration;
     setTick(session.tick ?? session.duration); tickRef.current = session.tick ?? session.duration;
-    const restoredEntities = session.entities ?? generateEntities(session.config);
-    entitiesRef.current = restoredEntities; setEntities(restoredEntities);
-    setObservations(session.observations ?? {});
-    setSessionStarted(session.startedAt); setSelectedId(restoredEntities[0]?.id ?? null);
+    const restoredEngine = new SimulationSession(session.config);
+    const restoredContacts = restoredEngine.advanceTo(session.tick ?? session.duration);
+    engineRef.current = restoredEngine;
+    setContacts(restoredContacts);
+    setSessionStarted(session.startedAt); setSelectedId(restoredContacts[0]?.id ?? null);
     setNotice("SESSION LOADED · CONFIGURATION AND EVENT HISTORY RESTORED");
   };
 
   const exportAar = () => {
-    const payload = { product: "SPECTRA Combined Simulator", exportedAt: new Date().toISOString(), config, elapsedSeconds: elapsedRef.current, entities, observations, events: eventsRef.current, note: "Synthetic training simulation. Decision-tree scoring is planned for a future phase." };
+    const payload = { product: "SPECTRA Combined Simulator", exportedAt: new Date().toISOString(), config, elapsedSeconds: elapsedRef.current, tick: tickRef.current, contacts, events: eventsRef.current, note: "Synthetic training simulation. Export contains trainee-visible observations only and excludes ground-truth classifications. Decision-tree scoring is planned for a future phase." };
     const url = URL.createObjectURL(new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" }));
     const link = document.createElement("a"); link.href = url; link.download = `spectra-aar-seed-${config.seed}.json`; link.click(); URL.revokeObjectURL(url);
     setNotice("AAR EXPORTED · JSON EVENT RECORD");
   };
 
   const generateVariant = () => {
-    const nextSeed = Math.floor(Math.random() * 800000) + 10000;
-    const next = { ...config, seed: nextSeed, contactCount: Math.max(3, Math.min(18, config.contactCount + Math.floor(Math.random() * 5) - 2)) };
+    const seedSource = ((Date.now() ^ config.seed ^ (tickRef.current * 2654435761)) >>> 0) || 1;
+    const variantRng = (seedValue: number) => {
+      let value = seedValue >>> 0;
+      return () => { value += 0x6D2B79F5; let t = value; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+    };
+    const random = variantRng(seedSource);
+    const nextSeed = 10000 + Math.floor(random() * 800000);
+    const next = { ...config, seed: nextSeed, contactCount: Math.max(3, Math.min(18, config.contactCount + Math.floor(random() * 5) - 2)) };
     setConfig(next); configRef.current = next; resetScenario(next);
     record("SESSION", "Procedural variant generated", `New reproducible seed ${next.seed} · ${next.contactCount} contacts`, 0);
     setNotice(`VARIANT GENERATED · SEED ${next.seed}`);
@@ -186,19 +202,19 @@ export default function App() {
           <div className="rail-bottom"><div className="offline-lock"><Shield size={15}/><div><strong>Offline-capable</strong><span>All entities and sensor reports are synthetic.</span></div></div><button className="text-button" onClick={() => setNotice("SPECTRA PROTOTYPE · SCORING TREE IS A FUTURE PHASE")}><CircleHelp size={13}/> About this build</button></div>
         </aside>
         <section className="main-column">
-          <div className="page-intro"><div><div className="eyebrow">COMMAND & TRAINING / WORKSPACE 01</div><h1>Common operating picture</h1><p>Unified synthetic sensor awareness and synchronized digital twin.</p></div><div className="intro-actions"><span className="seed-chip">SEED <b>{config.seed}</b></span><span className="status-chip"><span className="status-dot"/> {running?"EXERCISE RUNNING":"EXERCISE PAUSED"}</span></div></div>
+          <div className="page-intro"><div><div className="eyebrow">COMMAND & TRAINING / WORKSPACE 01</div><h1>Common operating picture</h1><p>Observation-derived awareness across 2D and 3D views.</p></div><div className="intro-actions"><span className="seed-chip">SEED <b>{config.seed}</b></span><span className="status-chip"><span className="status-dot"/> {running?"EXERCISE RUNNING":"EXERCISE PAUSED"}</span></div></div>
           <div className="metric-row">
             {[
               {label:"CURRENT TRACKS",value:tracked,tint:"mint",Icon:Radio,sub:"Current"},{label:"INTERMITTENT",value:intermittent,tint:"amber",Icon:Activity,sub:"Observation"},{label:"UNOBSERVED",value:unobserved,tint:"rose",Icon:AlertTriangle,sub:"Current tick"},{label:"SENSOR QUALITY",value:`${sensorHealth}%`,tint:"blue",Icon:Gauge,sub:"Synthetic"},
             ].map((metric) => <div className="metric-card" key={metric.label}><div className={`metric-icon ${metric.tint}`}><metric.Icon size={16}/></div><div><span>{metric.label}</span><strong>{typeof metric.value==="number"?metric.value.toString().padStart(2,"0"):metric.value}</strong></div><small>{metric.sub}</small></div>)}
           </div>
           <div className="view-grid">
-            <section className="panel map-panel"><div className="panel-heading"><div><div className="eyebrow">VIEW 01 / TACTICAL AWARENESS</div><h2>Contact map</h2></div><span className="live-label"><span className="live-dot"/>{running?"UPDATING":"STANDBY"}</span></div><TacticalMap entities={entities} observations={observations} selectedId={selectedId} onSelect={setSelectedId} lighting={config.lighting}/><div className="legend"><span><i className="legend-dot mint-dot"/> Track</span><span><i className="legend-dot amber-dot"/> Intermittent</span><span><i className="legend-dot rose-dot"/> Observation unavailable</span><span className="legend-note">Status reflects synthetic observations, not identity</span></div></section>
-            <section className="panel twin-panel"><div className="panel-heading"><div><div className="eyebrow">VIEW 02 / DIGITAL TWIN</div><h2>Environment</h2></div><span className="view-tag"><Layers3 size={12}/> 3D VIEW</span></div><DigitalTwin entities={entities} config={config} observations={observations} selectedId={selectedId} onSelect={setSelectedId}/><div className="twin-footer"><span><span className="live-dot"/> Shared simulation state</span><span>LIGHTING: {config.lighting.toUpperCase()}</span><span>VIS: {config.visibility.toUpperCase()}</span></div></section>
+            <section className="panel map-panel"><div className="panel-heading"><div><div className="eyebrow">VIEW 01 / TACTICAL AWARENESS</div><h2>Contact map</h2></div><span className="live-label"><span className="live-dot"/>{running?"UPDATING":"STANDBY"}</span></div><TacticalMap contacts={contacts} selectedId={selectedId} onSelect={setSelectedId} lighting={config.lighting}/><div className="legend"><span><i className="legend-dot mint-dot"/> Track</span><span><i className="legend-dot amber-dot"/> Intermittent</span><span><i className="legend-dot rose-dot"/> Observation unavailable</span><span className="legend-note">Status reflects synthetic observations, not identity</span></div></section>
+            <section className="panel twin-panel"><div className="panel-heading"><div><div className="eyebrow">VIEW 02 / DIGITAL TWIN</div><h2>Environment</h2></div><span className="view-tag"><Layers3 size={12}/> 3D VIEW</span></div><DigitalTwin contacts={contacts} config={config} selectedId={selectedId} onSelect={setSelectedId}/><div className="twin-footer"><span><span className="live-dot"/> Last-observed locations only</span><span>LIGHTING: {config.lighting.toUpperCase()}</span><span>VIS: {config.visibility.toUpperCase()}</span></div></section>
           </div>
           <div className="lower-grid">
-            <section className="panel contact-panel"><div className="panel-heading"><div><div className="eyebrow">SYNTHETIC SENSOR FEED</div><h2>Contact register</h2></div><span className="count-pill">{entities.length} CONTACTS</span></div><div className="contact-table-wrap"><table className="contact-table"><thead><tr><th>CONTACT</th><th>OBSERVATION</th><th>CONF.</th><th>ALT.</th><th>SELECT</th></tr></thead><tbody>{entities.slice(0,8).map((entity) => {const obs=observations[entity.id];return <tr key={entity.id} className={selectedId===entity.id?"selected-row":""} onClick={()=>setSelectedId(entity.id)}><td><span className={`entity-dot ${obs?.status==="TRACK"?"authorized":obs?.status==="INTERMITTENT"?"unknown":"simulated-threat"}`}/><strong>{entity.id}</strong><small>{obs?.status==="TRACK"?"TRACK OBSERVED":obs?.status==="INTERMITTENT"?"INTERMITTENT":obs?.status==="UNOBSERVED"?"NO OBSERVATION":"AWAITING OBSERVATION"}</small></td><td><span className={`observation-pill ${obs?.status?.toLowerCase()??"pending"}`}>{obs?.status??"PENDING"}</span></td><td>{obs?`${obs.confidence}%`:"—"}</td><td>{entity.altitude} m</td><td><button className="mini-select" onClick={(event)=>{event.stopPropagation();setSelectedId(entity.id)}}>{selectedId===entity.id?<Check size={13}/>:<Eye size={13}/>}</button></td></tr>})}</tbody></table></div><div className="contact-footer"><span>SELECTION: {selectedId??"NONE"}</span><span>OBSERVATIONS ARE SIMULATED</span></div></section>
-            <section className="panel detail-panel"><div className="panel-heading"><div><div className="eyebrow">CONTACT INSPECTOR</div><h2>Observation details</h2></div><Crosshair size={17} className="muted-icon"/></div>{selected?<div className="detail-content"><div className="detail-title"><span className="detail-symbol"><Target size={19}/></span><div><strong>{selected.id}</strong><span>Sensor contact · identity not confirmed</span></div></div><div className="detail-stats"><div><span>ALTITUDE</span><strong>{selected.altitude} m</strong></div><div><span>OBSERVATION</span><strong>{selectedObservation?.status??"PENDING"}</strong></div><div><span>CONFIDENCE</span><strong>{selectedObservation?`${selectedObservation.confidence}%`:"—"}</strong></div></div><div className="detail-note"><div className="note-icon"><Waves size={14}/></div><p>{selectedObservation?.note??"No observation recorded yet. Start the exercise to populate the synthetic feed."}</p></div><div className="evidence-label">AVAILABLE EVIDENCE</div><div className="evidence-row"><span>Source</span><strong>Simulated sensor</strong></div><div className="evidence-row"><span>Reported identity</span><strong>{selectedObservation?.status==="TRACK"?"Unconfirmed by sensor":"Insufficient observation"}</strong></div><div className="evidence-row"><span>Scenario label</span><strong>Hidden from operator view</strong></div></div>:<div className="empty-state">Select a contact to inspect its observations.</div>}</section>
+            <section className="panel contact-panel"><div className="panel-heading"><div><div className="eyebrow">SYNTHETIC SENSOR FEED</div><h2>Contact register</h2></div><span className="count-pill">{contacts.length} CONTACTS</span></div><div className="contact-table-wrap"><table className="contact-table"><thead><tr><th>CONTACT</th><th>OBSERVATION</th><th>CONF.</th><th>ALT.</th><th>SELECT</th></tr></thead><tbody>{contacts.slice(0,8).map((contact) => {const status=contact.status;return <tr key={contact.id} className={selectedId===contact.id?"selected-row":""} onClick={()=>setSelectedId(contact.id)}><td><span className={`entity-dot ${status==="TRACK"?"track":status==="INTERMITTENT"?"intermittent":status==="UNOBSERVED"?"unobserved":"pending"}`}/><strong>{contact.id}</strong><small>{status==="TRACK"?"TRACK OBSERVED":status==="INTERMITTENT"?"INTERMITTENT":status==="UNOBSERVED"?"NO OBSERVATION":"AWAITING OBSERVATION"}</small></td><td><span className={`observation-pill ${status?.toLowerCase()??"pending"}`}>{status??"PENDING"}</span></td><td>{contact.confidence !== undefined ? `${contact.confidence}%` : "—"}</td><td>{contact.altitude !== undefined ? `${contact.altitude} m (observed)` : "—"}</td><td><button className="mini-select" onClick={(event)=>{event.stopPropagation();setSelectedId(contact.id)}}>{selectedId===contact.id?<Check size={13}/>:<Eye size={13}/>}</button></td></tr>})}</tbody></table></div><div className="contact-footer"><span>SELECTION: {selectedId??"NONE"}</span><span>OBSERVATIONS ARE SIMULATED</span></div></section>
+            <section className="panel detail-panel"><div className="panel-heading"><div><div className="eyebrow">CONTACT INSPECTOR</div><h2>Observation details</h2></div><Crosshair size={17} className="muted-icon"/></div>{selected?<div className="detail-content"><div className="detail-title"><span className="detail-symbol"><Target size={19}/></span><div><strong>{selected.id}</strong><span>Sensor contact · identity not confirmed</span></div></div><div className="detail-stats"><div><span>ALTITUDE</span><strong>{selected.altitude !== undefined ? `${selected.altitude} m (observed)` : "—"}</strong></div><div><span>OBSERVATION</span><strong>{selectedObservation?.status??"PENDING"}</strong></div><div><span>CONFIDENCE</span><strong>{selectedObservation?`${selectedObservation.confidence}%`:"—"}</strong></div></div><div className="detail-note"><div className="note-icon"><Waves size={14}/></div><p>{selectedObservation?.note??"No observation recorded yet. Start the exercise to populate the synthetic feed."}</p></div><div className="evidence-label">AVAILABLE EVIDENCE</div><div className="evidence-row"><span>Source</span><strong>Simulated sensor</strong></div><div className="evidence-row"><span>Reported identity</span><strong>{selectedObservation?.status==="TRACK"?"Unconfirmed by sensor":"Insufficient observation"}</strong></div><div className="evidence-row"><span>Ground truth</span><strong>Not available in operator view</strong></div></div>:<div className="empty-state">Select a contact to inspect its observations.</div>}</section>
           </div>
           <div className="event-banner"><div className="banner-icon"><Activity size={15}/></div><span>{notice}</span><span className="banner-time">{timeLabel(elapsed)} SIM TIME</span></div>
         </section>
