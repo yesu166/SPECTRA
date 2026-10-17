@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Activity, AlertTriangle, ArrowDownToLine, Check, ChevronDown, CircleHelp,
-  Activity, Clock3, Crosshair, Eye, Gauge, Grid2X2, Layers3, Map, Moon, Pause,
+  Clock3, Crosshair, Eye, Gauge, Grid2X2, Layers3, Map, Moon, Pause,
   Play, Radio, RotateCcw, Save, Settings2, Shield, Sun, SunMoon, Target,
   Waves, Wind,
 } from "lucide-react";
@@ -50,8 +50,6 @@ export default function App() {
   const frameRef = useRef<number | null>(null);
   const lastFrameTimeRef = useRef<number | null>(null);
   const accumulatorRef = useRef(0);
-  const publishAccumulatorRef = useRef(0);
-  const performanceAccumulatorRef = useRef(0);
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [showPerformance, setShowPerformance] = useState(false);
   const [perf, setPerf] = useState({ fps: 0, simHz: 0, frameMs: 0 });
@@ -261,10 +259,7 @@ export default function App() {
       frames += 1;
       measurementElapsed += rawDelta;
       measurementFrameElapsed += rawDelta;
-      measurementStepElapsed += simulationSteps;
-      publishAccumulatorRef.current += delta;
-      performanceAccumulatorRef.current += Math.max(0, now - (previous ?? now));
-
+  
       if (now - lastPublishedAt >= 500) {
         const span = Math.max(0.001, (now - lastPublishedAt) / 1000);
         if (showPerformance) {
@@ -277,9 +272,6 @@ export default function App() {
         frames = 0;
         simulationSteps = 0;
         measurementFrameElapsed = 0;
-        measurementStepElapsed = 0;
-        measurementElapsed = 0;
-        performanceAccumulatorRef.current = 0;
         lastPublishedAt = now;
       }
       frameRef.current = requestAnimationFrame(frame);
@@ -449,7 +441,7 @@ export default function App() {
           <div className="event-banner"><div className="banner-icon"><Activity size={15}/></div><span>{notice}</span><span className="banner-time">{timeLabel(elapsed)} SIM TIME</span></div>
         </section>
         <aside className="right-column">
-          <section className="panel run-panel"><div className="panel-heading"><div><div className="eyebrow">SESSION CONTROL</div><h2>Exercise runner</h2></div><span className="count-pill">LOCAL</span></div><div className="session-clock"><span>ELAPSED SIM TIME</span><strong>{timeLabel(elapsed)}</strong><div><span className={running?"running-dot":"paused-dot"}/>{running?"SIMULATION RUNNING":"SIMULATION PAUSED"}</div></div><div className="runner-actions"><button className={running?"pause-button":"run-button"} onClick={() => toggleExercise("mouse")}>{running?<><Pause size={15}/> Pause</>:<><Play size={15}/>{tick>0?"Resume exercise":"Start exercise"}</>}</button><button className="icon-button" title="Advance one simulation tick" onClick={()=>{if(!running)step()}}><Clock3 size={15}/></button><button className="icon-button" title="Reset scenario" onClick={()=>resetScenario(config)}><RotateCcw size={15}/></button></div><div className="runner-secondary"><button onClick={saveSession}><Save size={14}/> Save session</button><button onClick={exportAar}><ArrowDownToLine size={14}/> Export AAR</button></div></section>
+          <section className="panel run-panel"><div className="panel-heading"><div><div className="eyebrow">SESSION CONTROL</div><h2>Exercise runner</h2></div><span className="count-pill">LOCAL</span></div><div className="session-clock"><span>ELAPSED SIM TIME</span><strong>{timeLabel(elapsed)}</strong><div><span className={running?"running-dot":"paused-dot"}/>{running?"SIMULATION RUNNING":"SIMULATION PAUSED"}</div></div><div className="runner-actions"><button className={running?"pause-button":"run-button"} onClick={() => toggleExercise("mouse")}>{running?<><Pause size={15}/> Pause</>:<><Play size={15}/>{tick>0?"Resume exercise":"Start exercise"}</>}</button><button className="icon-button" title="Advance one simulation tick" onClick={()=>{if(!running){simulationStep();setContacts(engineRef.current?.getContacts()??[]);setTick(tickRef.current);setElapsed(elapsedRef.current)}}}><Clock3 size={15}/></button><button className="icon-button" title="Reset scenario" onClick={()=>resetScenario(config)}><RotateCcw size={15}/></button></div><div className="runner-secondary"><button onClick={saveSession}><Save size={14}/> Save session</button><button onClick={exportAar}><ArrowDownToLine size={14}/> Export AAR</button></div></section>
           <section className="panel equipment-panel"><div className="panel-heading"><div><div className="eyebrow">VIRTUAL EQUIPMENT</div><h2>Simulated sensor</h2></div><span className="equipment-chip"><span className="live-dot"/> READY</span></div><div className="device-illustration"><div className="device-screen"><span>SIM / SENSOR-01</span><div className="device-wave"><i/><i/><i/><i/><i/><i/><i/><i/><i/><i/></div><strong>{sensorHealth}%</strong><small>SYNTHETIC STATUS</small></div><div className="device-body"><span/><span/><span/><i/><i/><i/></div></div><div className="device-state"><span>DEVICE STATE</span><strong>SIMULATED · NO HARDWARE</strong></div><div className="device-state"><span>OBSERVATION QUALITY</span><strong>{config.sensorQuality}% configured</strong></div><p className="device-disclaimer">Illustrative training control only. No actual sensing or countermeasure function.</p></section>
           <section className="panel environment-panel"><div className="panel-heading"><div><div className="eyebrow">ENVIRONMENT STATE</div><h2>Current conditions</h2></div><Sun size={16} className="muted-icon"/></div><div className="env-state-grid"><div><span>SETTING</span><strong>{config.environment.toUpperCase()}</strong></div><div><span>LIGHTING</span><strong>{config.lighting.toUpperCase()}</strong></div><div><span>VISIBILITY</span><strong>{config.visibility.toUpperCase()}</strong></div><div><span>DIFFICULTY</span><strong>LEVEL {config.difficulty}</strong></div></div><div className="environment-note"><Wind size={14}/><span>{config.visibility==="fog"?"Fog enabled: synthetic observation dropout increases.":config.visibility==="haze"?"Haze enabled: observation confidence is reduced.":"Clear conditions: baseline synthetic visibility."}</span></div></section>
           <AfterActionReview events={events} sessions={sessions} onLoadSession={loadSession}/>
