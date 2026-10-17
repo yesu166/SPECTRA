@@ -133,7 +133,7 @@ export default function App() {
   const scenario = SCENARIOS.find((item) => item.id === config.scenarioId) ?? SCENARIOS[0];
 
   const saveSession = () => {
-    const snapshot: SessionSnapshot = { id: `session-${Date.now()}`, startedAt: sessionStarted, config, duration: elapsedRef.current, events: eventsRef.current };
+    const snapshot: SessionSnapshot = { id: `session-${Date.now()}`, startedAt: sessionStarted, config, duration: elapsedRef.current, events: eventsRef.current, entities: entitiesRef.current, observations, tick: tickRef.current };
     const next = [snapshot, ...loadSessions()].slice(0, 12);
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
@@ -150,12 +150,11 @@ export default function App() {
     eventsRef.current = session.events; setEvents(session.events);
     eventCounter.current = session.events.length;
     setElapsed(session.duration); elapsedRef.current = session.duration;
-    setTick(session.duration); tickRef.current = session.duration;
-    const generated = generateEntities(session.config);
-    entitiesRef.current = generated; setEntities(generated);
-    const restored: Record<string, Observation> = {};
-    generated.forEach((entity) => { restored[entity.id] = getObservation(session.config, entity, Math.max(1, session.duration)); });
-    setObservations(restored);
+    setTick(session.tick ?? session.duration); tickRef.current = session.tick ?? session.duration;
+    const restoredEntities = session.entities ?? generateEntities(session.config);
+    entitiesRef.current = restoredEntities; setEntities(restoredEntities);
+    const restoredObservations = session.observations ?? {};
+    setObservations(restoredObservations);
     setSessionStarted(session.startedAt); setSelectedId(generated[0]?.id ?? null);
     setNotice("SESSION LOADED · CONFIGURATION AND EVENT HISTORY RESTORED");
   };
