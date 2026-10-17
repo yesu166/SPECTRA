@@ -40,6 +40,7 @@ No cloud service or API key is required at runtime. After dependencies are insta
 - Optional Cardboard-style side-by-side left/right-eye stereo mode for inexpensive phone viewers, with a gaze-and-hold 3D HUD.
 - Touch and gaze controls for observe, request more information, classify, report, escalate, authorise an abstract response, defer and set confidence.
 - Trainee actions record their input method (mouse, touch or gaze) in the session event log.
+- Start, pause and resume controls are available within phone and Cardboard views, so the exercise can be controlled without leaving immersive mode.
 
 ## Project structure
 
