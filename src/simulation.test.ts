@@ -78,4 +78,25 @@ describe("trainee-safe simulation facade", () => {
     expect(scenarioFor("rural-site").environment).toBe("rural");
     expect(scenarioFor("perimeter-watch").contactCount).toBeGreaterThan(0);
   });
+
+  it("produces a deterministic extra observation when the trainee requests more information", () => {
+    const config = { ...DEFAULT_CONFIG, seed: 76241, sensorQuality: 82 };
+    const first = new SimulationSession(config);
+    first.advanceTo(5);
+    const tickBeforeRequest = first.tick;
+    const firstResult = first.requestMoreInfo("C-01");
+    const firstContact = firstResult.find((contact) => contact.id === "C-01");
+
+    const second = new SimulationSession(config);
+    second.advanceTo(5);
+    const secondResult = second.requestMoreInfo("C-01");
+
+    expect(first.tick).toBe(tickBeforeRequest);
+    expect(firstContact?.source).toMatch(/SIMULATED CAMERA|SYNTHETIC FUSION/);
+    expect(firstResult).toEqual(secondResult);
+    const serialized = JSON.stringify(firstContact);
+    expect(serialized).not.toContain("simulated-threat");
+    expect(serialized).not.toContain("AUTHORIZED");
+    expect(serialized).not.toContain("UNRESOLVED");
+  });
 });
