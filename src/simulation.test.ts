@@ -33,6 +33,28 @@ describe("trainee-safe simulation facade", () => {
     expect(runTo(98765, 25)).toEqual(runTo(98765, 25));
   });
 
+  it("moves a track using elapsed seconds rather than assuming one-second updates", async () => {
+    const { moveTruthTracks } = await import("./simulationCore");
+    const track = {
+      id: "C-TEST", kind: "unknown" as const, label: "UNRESOLVED",
+      x: 0.5, y: 0.5, altitude: 100, vx: 0.2, vy: 0.1, phase: 0,
+    };
+    const moved = moveTruthTracks([track], 0.05)[0];
+    expect(moved.x).toBeCloseTo(0.51, 8);
+    expect(moved.y).toBeCloseTo(0.505, 8);
+  });
+
+  it("keeps track coordinates inside the simulated area while reflecting velocity at an edge", async () => {
+    const { moveTruthTracks } = await import("./simulationCore");
+    const track = {
+      id: "C-EDGE", kind: "unknown" as const, label: "UNRESOLVED",
+      x: 0.939, y: 0.5, altitude: 100, vx: 0.2, vy: 0, phase: 0,
+    };
+    const moved = moveTruthTracks([track], 0.1)[0];
+    expect(moved.x).toBeLessThanOrEqual(0.94);
+    expect(moved.vx).toBeLessThan(0);
+  });
+
   it("changes the generated view when the seed changes", () => {
     expect(runTo(123, 12)).not.toEqual(runTo(456, 12));
   });
@@ -43,7 +65,7 @@ describe("trainee-safe simulation facade", () => {
     let checked = false;
 
     for (let tick = 0; tick < 150; tick += 1) {
-      const current = session.step();
+      const current = session.step(1 / 30);
       for (const contact of current) {
         const previous = prior.find((candidate) => candidate.id === contact.id);
         if (contact.status === "UNOBSERVED" && previous?.lastObservedAt !== undefined) {
