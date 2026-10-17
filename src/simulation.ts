@@ -9,6 +9,8 @@ import {
   DEFAULT_CONFIG,
   SCENARIOS,
   createEvent,
+  createRng,
+  stableHash,
   generateTruthTracks,
   moveTruthTracks,
   observeTruth,
@@ -54,7 +56,7 @@ export interface ContactView {
   altitude?: number;
   status?: SensorStatus;
   confidence?: number;
-  source?: "SIMULATED RADAR";
+  source?: SensorSource;
   note?: string;
   observedAt?: number;
   lastObservedAt?: number;
