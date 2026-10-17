@@ -12,6 +12,8 @@ interface Props {
   selectedId: string | null;
   onSelect: (id: string) => void;
   elapsedSeconds: number;
+  isRunning: boolean;
+  onToggleSimulation: (inputMethod?: InputMethod) => void;
   onTraineeAction: (
     action: TraineeAction,
     confidence: ConfidenceLevel,
@@ -26,6 +28,7 @@ interface HudButtonSpec {
   action?: TraineeAction;
   confidence?: ConfidenceLevel;
   classification?: ContactClassification;
+  simulationControl?: boolean;
   exit?: boolean;
 }
 
@@ -42,6 +45,7 @@ const HUD_BUTTONS: HudButtonSpec[] = [
   { label: "CONF LOW", action: "SET_CONFIDENCE", confidence: "LOW" },
   { label: "CONF MED", action: "SET_CONFIDENCE", confidence: "MEDIUM" },
   { label: "CONF HIGH", action: "SET_CONFIDENCE", confidence: "HIGH" },
+  { label: "RUN / PAUSE", simulationControl: true },
   { label: "EXIT VIEW", exit: true },
 ];
 
@@ -87,7 +91,7 @@ function buildStatusTexture() {
 }
 
 export default function DigitalTwin({
-  contacts, config, selectedId, onSelect, elapsedSeconds, onTraineeAction,
+  contacts, config, selectedId, onSelect, elapsedSeconds, isRunning, onToggleSimulation, onTraineeAction,
 }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
@@ -100,6 +104,8 @@ export default function DigitalTwin({
   const contactRef = useRef(contacts);
   const selectionRef = useRef(selectedId);
   const elapsedRef = useRef(elapsedSeconds);
+  const runningRef = useRef(isRunning);
+  const toggleSimulationRef = useRef(onToggleSimulation);
   const modeRef = useRef<ViewMode>("standard");
   const confidenceRef = useRef<ConfidenceLevel>("MEDIUM");
   const gazeTargetRef = useRef<THREE.Object3D | null>(null);
@@ -118,6 +124,8 @@ export default function DigitalTwin({
   contactRef.current = contacts;
   selectionRef.current = selectedId;
   elapsedRef.current = elapsedSeconds;
+  runningRef.current = isRunning;
+  toggleSimulationRef.current = onToggleSimulation;
   modeRef.current = viewMode;
   confidenceRef.current = confidence;
 
@@ -126,6 +134,10 @@ export default function DigitalTwin({
     inputMethod: InputMethod,
     contactId = selectionRef.current ?? undefined,
   ) => {
+    if (spec.simulationControl) {
+      toggleSimulationRef.current(inputMethod);
+      return;
+    }
     if (spec.exit) {
       modeRef.current = "standard";
       setViewMode("standard");
@@ -195,8 +207,8 @@ export default function DigitalTwin({
       const euler = new THREE.Euler(event.beta * radians, event.alpha * radians, -event.gamma * radians, "YXZ");
       const raw = new THREE.Quaternion().setFromEuler(euler);
       const screenAngle = window.screen.orientation?.angle ?? (typeof window.orientation === "number" ? window.orientation : 0);
-      raw.multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), -screenAngle * radians));
       raw.multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -Math.PI / 2));
+      raw.multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), -screenAngle * radians));
       if (!orientationBaselineRef.current) {
         orientationBaselineRef.current = raw.clone();
         cameraBaselineRef.current = camera.quaternion.clone();
@@ -228,6 +240,12 @@ export default function DigitalTwin({
     scene.background = new THREE.Color(night ? "#07111b" : dusk ? "#2a2331" : "#b8c9ca");
     scene.fog = new THREE.Fog(scene.background, config.visibility === "fog" ? 16 : config.visibility === "haze" ? 26 : 45, 130);
     const camera = new THREE.PerspectiveCamera(48, 1, .1, 300);
+    const gazeReticleMaterial = new THREE.MeshBasicMaterial({ color: 0x9be9ce, transparent: true, opacity: .9, side: THREE.DoubleSide, depthTest: false });
+    const gazeReticle = new THREE.Mesh(new THREE.RingGeometry(.025, .043, 20), gazeReticleMaterial);
+    gazeReticle.position.set(0, 0, -1.2);
+    gazeReticle.renderOrder = 20;
+    gazeReticle.visible = false;
+    camera.add(gazeReticle);
     const standardPosition = new THREE.Vector3(0, 36, 58);
     const phonePosition = new THREE.Vector3(0, 7, 32);
     camera.position.copy(standardPosition);
@@ -324,7 +342,7 @@ export default function DigitalTwin({
       const texture = buildButtonTexture(spec.label);
       const material = new THREE.MeshBasicMaterial({ map: texture, transparent: true, side: THREE.DoubleSide, depthWrite: false });
       const mesh = new THREE.Mesh(new THREE.PlaneGeometry(1.12, .28), material);
-      mesh.position.set((column - 1) * 1.24, .58 - row * .36, 0);
+      mesh.position.set((column - 1) * 1.24, -.35 - row * .33, 0);
       mesh.userData.hudAction = spec.label;
       hudRoot.add(mesh);
       hudButtons.push(mesh);
@@ -334,7 +352,7 @@ export default function DigitalTwin({
     statusDrawing.texture.colorSpace = THREE.SRGBColorSpace;
     const statusMaterial = new THREE.MeshBasicMaterial({ map: statusDrawing.texture, transparent: true, side: THREE.DoubleSide, depthWrite: false });
     const statusMesh = new THREE.Mesh(new THREE.PlaneGeometry(3.85, .37), statusMaterial);
-    statusMesh.position.set(0, 1.05, 0);
+    statusMesh.position.set(0, .2, 0);
     hudRoot.add(statusMesh);
 
     const eyeCamera = new THREE.StereoCamera();
@@ -381,12 +399,14 @@ export default function DigitalTwin({
       gazeFiredRef.current = false;
       if (mode === "standard") {
         hudRoot.visible = false;
+        gazeReticle.visible = false;
         camera.position.copy(standardPosition);
         camera.lookAt(0, 0, 0);
       } else {
         camera.position.copy(phonePosition);
         camera.lookAt(0, 7, 0);
         hudRoot.visible = mode === "cardboard";
+        gazeReticle.visible = mode === "cardboard";
         if (mode === "cardboard") recenterHudRef.current?.();
       }
       resize();
@@ -408,7 +428,7 @@ export default function DigitalTwin({
       ctx.font = "bold 28px monospace";
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      ctx.fillText(`SPECTRA / SYNTHETIC SENSOR · TRACK ${active} · GAP ${gaps} · T+${timeLabel(time)}`, statusDrawing.canvas.width / 2, statusDrawing.canvas.height / 2, statusDrawing.canvas.width - 22);
+      ctx.fillText(`SPECTRA / ${runningRef.current ? "RUNNING" : "PAUSED"} · TRACK ${active} · GAP ${gaps} · T+${timeLabel(time)}`, statusDrawing.canvas.width / 2, statusDrawing.canvas.height / 2, statusDrawing.canvas.width - 22);
       statusDrawing.texture.needsUpdate = true;
     };
     let lastStatusSecond = -1;
@@ -437,7 +457,7 @@ export default function DigitalTwin({
         const second = Math.floor(elapsedRef.current);
         if (second !== lastStatusSecond) { drawStatus(elapsedRef.current); lastStatusSecond = second; }
         raycaster.setFromCamera(center, camera);
-        const hit = raycaster.intersectObjects(hudButtons, false)[0]?.object ?? null;
+        const hit = raycaster.intersectObjects([...hudButtons, ...pickables], false)[0]?.object ?? null;
         if (hit !== gazeTargetRef.current) {
           gazeTargetRef.current = hit;
           gazeStartRef.current = hit ? performance.now() : 0;
@@ -447,10 +467,21 @@ export default function DigitalTwin({
           const material = button.material as THREE.MeshBasicMaterial;
           material.color.set(button === hit ? 0x9bffe0 : 0xffffff);
         });
+        gazeReticleMaterial.color.set(hit ? 0xffd483 : 0x9be9ce);
+        const dwell = hit && gazeStartRef.current ? Math.min(1, (performance.now() - gazeStartRef.current) / 1100) : 0;
+        gazeReticle.scale.setScalar(1 + dwell * .8);
         if (hit && !gazeFiredRef.current && performance.now() - gazeStartRef.current >= 1100) {
           gazeFiredRef.current = true;
           const spec = buttonSpecs.get(hit);
-          if (spec) reportAction(spec, "gaze");
+          if (spec) {
+            reportAction(spec, "gaze");
+          } else {
+            const contactId = hit.parent?.userData.contactId;
+            if (typeof contactId === "string") {
+              callbackRef.current(contactId);
+              actionRef.current("OBSERVE", confidenceRef.current, "gaze", undefined, contactId);
+            }
+          }
         }
       }
       if (mode === "cardboard") {
@@ -518,7 +549,10 @@ export default function DigitalTwin({
         <div className="phone-vr-hud">
           <div className="phone-hud-heading">
             <div><span>SPECTRA · PHONE MOTION</span><strong>T+{timeLabel(elapsedSeconds)}</strong></div>
-            <button onPointerUp={(event) => fire({ label: "EXIT", exit: true }, event)}>EXIT</button>
+            <div className="phone-hud-run-controls">
+              <button onPointerUp={(event) => toggleSimulationRef.current(event.pointerType === "touch" ? "touch" : "mouse")}>{isRunning ? "PAUSE" : elapsedSeconds > 0 ? "RESUME" : "START"}</button>
+              <button onPointerUp={(event) => fire({ label: "EXIT", exit: true }, event)}>EXIT</button>
+            </div>
           </div>
           <div className="phone-hud-sensors">
             <span><i className="hud-status-track" /> TRACK {contacts.filter((contact) => contact.status === "TRACK").length}</span>

@@ -36,6 +36,11 @@ No cloud service or API key is required at runtime. After dependencies are insta
 - Repeatable seeded simulation steps with pause, resume, single-step and reset.
 - Browser-local session history and JSON export using trainee-visible data.
 - Truth/observation separation in the application architecture, guarded by regression tests and an import-boundary check.
+- Optional full-screen phone-motion view using device orientation sensors.
+- Optional Cardboard-style side-by-side left/right-eye stereo mode for inexpensive phone viewers, with a gaze-and-hold 3D HUD.
+- Touch and gaze controls for observe, request more information, classify, report, escalate, authorise an abstract response, defer and set confidence.
+- Trainee actions record their input method (mouse, touch or gaze) in the session event log.
+- Start, pause and resume controls are available within phone and Cardboard views, so the exercise can be controlled without leaving immersive mode.
 
 ## Project structure
 
@@ -64,9 +69,22 @@ SPECTRA/
 └── vitest.config.ts
 ```
 
+## Phone VR / inexpensive Cardboard viewer
+
+Open SPECTRA on the phone, then use the controls above the 3D view:
+
+- **3D** — return to the normal desktop-style viewport.
+- **Phone VR** — enter full-screen motion-controlled viewing with touch overlays.
+- **Cardboard** — enter split-screen left/right-eye stereo. Rotate the phone to **landscape** for the two side-by-side eye views, then put it into the viewer. Look at a 3D HUD button and hold your gaze for about 1.1 seconds to activate it. The **EXIT VIEW** button returns to normal mode.
+
+Phone orientation sensors generally require a secure context (HTTPS, except localhost). On iPhone, tap the mode button and grant motion permission when asked. If motion tracking does not start, check browser permission and confirm the site is HTTPS. The Cardboard mode is a basic phone-based stereo prototype, not full WebXR headset support; the exact visual result depends on the phone screen, viewer lens spacing and how the device fits in the viewer.
+
+The 3D HUD and touch buttons issue the same trainee actions and write the selected input method (mouse, touch or gaze) to the event timeline. All contact markers and decisions are based on trainee-visible synthetic observations; truth labels are not shown in the trainee HUD.
+
 ## Current boundaries
 
-This is an engineering prototype, not a validated training product. Its sensor model is illustrative, not calibrated to physical sensors. Decision-tree scoring, evidence-linked score explanations, seekable synchronized replay, expert-reviewed decision rules, a backend and multi-user networking remain future work. The browser-delivered code can be inspected; truth separation is an architectural separation, not a security boundary against a determined user.
+This is an engineering prototype, not a validated training product. Its sensor model is illustrative, not calibrated to physical sensors. Decision-tree scoring, evidence-linked score explanations, seekable synchronized replay, expert-reviewed decision rules, a backend and multi-user networking remain future work. The browser-delivered code can be inspected; truth separation is an architectural separation, not a security boundary against a determined user. Phone motion and Cardboard stereo have not yet been validated across a matrix of physical phones, browsers and viewers.
+
 
 ## Contribution and validation
 

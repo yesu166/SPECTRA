@@ -19,3 +19,47 @@
 @media(max-width:1450px){.workspace{grid-template-columns:235px minmax(0,1fr)}.right-column{grid-column:2;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));align-items:start}.aar-panel,.prototype-note{grid-column:span 2}.control-rail{grid-row:span 2}.topbar-center{display:none}}
 @media(max-width:1000px){.workspace{grid-template-columns:1fr}.control-rail{position:static;min-height:auto;grid-row:auto;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 12px}.rail-heading,.rail-bottom{grid-column:span 2}.field-label{margin-top:3px}.control-help{min-height:0}.segmented{margin-bottom:5px}.range-ends{margin-bottom:8px}.right-column{grid-column:1}.page-intro h1{font-size:22px}}
 @media(max-width:680px){.topbar{padding:0 12px;height:60px}.brand{min-width:auto}.brand-word span{display:none}.brand-word strong{font-size:16px}.topbar-right{min-width:auto}.top-clock{display:none}.mode-pill{font-size:8px;padding:6px}.workspace{padding:9px;gap:10px}.control-rail{grid-template-columns:1fr;padding:12px}.rail-heading,.rail-bottom{grid-column:auto}.view-grid,.lower-grid{grid-template-columns:1fr}.right-column{grid-template-columns:1fr}.aar-panel,.prototype-note{grid-column:auto}.metric-row{grid-template-columns:repeat(2,minmax(0,1fr))}.page-intro{align-items:flex-start;flex-direction:column}.intro-actions{flex-direction:row;align-items:center}.page-intro h1{font-size:21px}.map-shell,.twin-stage{height:270px}.metric-card small{display:none}.app-footer{flex-wrap:wrap;padding:12px}.app-footer span:last-child{width:100%}.legend-note{width:100%;margin-left:0}}
+
+
+/* Phone motion and Cardboard-style stereo modes */
+.view-mode-controls{position:absolute;top:9px;right:9px;z-index:4;display:flex;gap:4px;padding:4px;border:1px solid #38505a;border-radius:7px;background:#07131de8;box-shadow:0 4px 20px #0005}
+.view-mode-controls button{min-height:30px;padding:6px 9px;border:1px solid #314751;border-radius:4px;background:#10212b;color:#a8bec6;font:9px var(--mono);letter-spacing:.04em;white-space:nowrap}
+.view-mode-controls button.active{border-color:#5bcba8;background:#14362d;color:#a6f0d7}
+.twin-stage.immersive-stage{position:fixed;inset:0;width:100vw;height:100vh;height:100dvh;min-height:100svh;z-index:10000;border:0;border-radius:0;background:#061018;isolation:isolate;touch-action:none}
+.twin-stage.immersive-stage .three-host{position:absolute;inset:0;touch-action:none;overscroll-behavior:contain}
+.twin-stage.immersive-stage .three-host canvas{width:100%;height:100%;touch-action:none}
+.twin-stage.immersive-stage .twin-badge{top:calc(env(safe-area-inset-top,0px) + 12px);left:12px;max-width:48vw;line-height:1.4;backdrop-filter:blur(8px)}
+.twin-stage.immersive-stage .twin-overlay{display:none}
+.twin-stage.immersive-stage .view-mode-controls{top:calc(env(safe-area-inset-top,0px) + 8px);right:10px;max-width:52vw;gap:3px}
+.twin-stage.immersive-stage .view-mode-controls button{font-size:8px;padding:6px 7px;min-height:31px}
+.phone-vr-hud{position:absolute;z-index:5;left:10px;right:10px;bottom:calc(env(safe-area-inset-bottom,0px) + 10px);max-height:66dvh;overflow:auto;overscroll-behavior:contain;padding:10px;border:1px solid #527168;border-radius:10px;background:#061018eF;box-shadow:0 8px 32px #0009;backdrop-filter:blur(9px);display:flex;flex-direction:column;gap:8px;touch-action:pan-y}
+.phone-hud-heading{display:flex;align-items:center;justify-content:space-between;gap:10px;border-bottom:1px solid #263b43;padding-bottom:7px}
+.phone-hud-heading>div{display:flex;flex-direction:column;gap:3px}.phone-hud-heading span{color:#8bb2ac;font:9px var(--mono);letter-spacing:.08em}.phone-hud-heading strong{color:#e3f4ee;font:600 18px var(--mono)}
+.phone-hud-heading button,.phone-hud-confidence button,.phone-hud-actions button,.phone-hud-classify button{border:1px solid #35534d;border-radius:5px;background:#102720;color:#c4e4d8;font-size:11px;font-weight:600;min-height:37px;padding:8px 9px;touch-action:manipulation}
+.phone-hud-heading button{background:#2a1820;border-color:#68404b;color:#ffc4cb;min-width:54px}
+.phone-hud-sensors{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;color:#a8bbc1;font:9px var(--mono)}
+.phone-hud-sensors span{display:flex;align-items:center;gap:5px}.phone-hud-sensors i{width:7px;height:7px;display:inline-block;border-radius:50%}.hud-status-track{background:#59d4ad}.hud-status-gap{background:#f3be61}
+.phone-hud-confidence{display:grid;grid-template-columns:1fr repeat(3,auto);align-items:center;gap:5px;color:#829da3;font:9px var(--mono)}
+.phone-hud-confidence button{min-height:31px;padding:6px 10px;font:9px var(--mono)}.phone-hud-confidence button.active{border-color:#6ce3ba;background:#1c4839;color:#d2ffee}
+.phone-hud-actions{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}.phone-hud-actions button{background:#11222b;border-color:#304954;color:#d9e6eb}.phone-hud-actions button:active,.phone-hud-classify button:active{transform:scale(.98);background:#1c4939}
+.phone-hud-classify{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}.phone-hud-classify button{min-height:34px;background:#211f17;border-color:#5b5236;color:#f1dba6;font-size:10px}
+.phone-hud-help{color:#78938f;font:8px var(--mono);line-height:1.4}
+.cardboard-gaze-tip{display:none}
+.twin-stage.immersive-cardboard .view-mode-controls,.twin-stage.immersive-cardboard .phone-vr-hud{display:none}
+.twin-stage.immersive-cardboard .twin-badge{display:none}
+@media(max-width:680px){
+  .view-mode-controls{top:8px;right:7px;gap:2px;padding:3px}.view-mode-controls button{min-height:29px;padding:5px 6px;font-size:8px}
+  .twin-stage:not(.immersive-stage) .view-mode-controls{max-width:72%;}
+  .phone-vr-hud{left:7px;right:7px;bottom:calc(env(safe-area-inset-bottom,0px) + 7px);padding:8px;gap:6px;max-height:68dvh}
+  .phone-hud-actions{grid-template-columns:repeat(3,minmax(0,1fr));gap:5px}.phone-hud-actions button{min-height:38px;font-size:10px;padding:6px 3px}
+  .phone-hud-classify{gap:5px}.phone-hud-classify button{padding:6px 3px;font-size:9px;min-height:34px}
+}
+@media(max-height:500px) and (orientation:landscape){
+  .phone-vr-hud{left:auto;right:8px;bottom:8px;top:calc(env(safe-area-inset-top,0px) + 48px);width:min(48vw,520px);max-height:none;overflow:auto;padding:7px}
+  .phone-hud-heading{padding-bottom:4px}.phone-hud-heading strong{font-size:14px}.phone-hud-sensors{font-size:8px}
+  .phone-hud-confidence button{min-height:28px}.phone-hud-actions button,.phone-hud-classify button{min-height:30px;font-size:9px}
+  .phone-hud-help{font-size:7px}
+}
+@media(prefers-reduced-motion:reduce){.phone-hud-actions button:active,.phone-hud-classify button:active{transform:none}}
+
+.phone-hud-run-controls{display:flex;align-items:center;gap:5px}.phone-hud-run-controls button:first-child{background:#153c31;border-color:#4c8972;color:#d6ffed}.phone-hud-run-controls button:last-child{background:#2a1820;border-color:#68404b;color:#ffc4cb;min-width:48px}
