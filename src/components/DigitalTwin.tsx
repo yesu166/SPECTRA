@@ -437,7 +437,7 @@ export default function DigitalTwin({
         const second = Math.floor(elapsedRef.current);
         if (second !== lastStatusSecond) { drawStatus(elapsedRef.current); lastStatusSecond = second; }
         raycaster.setFromCamera(center, camera);
-        const hit = raycaster.intersectObjects(hudButtons, false)[0]?.object ?? null;
+        const hit = raycaster.intersectObjects([...hudButtons, ...pickables], false)[0]?.object ?? null;
         if (hit !== gazeTargetRef.current) {
           gazeTargetRef.current = hit;
           gazeStartRef.current = hit ? performance.now() : 0;
@@ -450,7 +450,15 @@ export default function DigitalTwin({
         if (hit && !gazeFiredRef.current && performance.now() - gazeStartRef.current >= 1100) {
           gazeFiredRef.current = true;
           const spec = buttonSpecs.get(hit);
-          if (spec) reportAction(spec, "gaze");
+          if (spec) {
+            reportAction(spec, "gaze");
+          } else {
+            const contactId = hit.parent?.userData.contactId;
+            if (typeof contactId === "string") {
+              callbackRef.current(contactId);
+              actionRef.current("OBSERVE", confidenceRef.current, "gaze", undefined, contactId);
+            }
+          }
         }
       }
       if (mode === "cardboard") {
