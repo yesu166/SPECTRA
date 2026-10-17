@@ -207,8 +207,8 @@ export default function DigitalTwin({
       const euler = new THREE.Euler(event.beta * radians, event.alpha * radians, -event.gamma * radians, "YXZ");
       const raw = new THREE.Quaternion().setFromEuler(euler);
       const screenAngle = window.screen.orientation?.angle ?? (typeof window.orientation === "number" ? window.orientation : 0);
-      raw.multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), -screenAngle * radians));
       raw.multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -Math.PI / 2));
+      raw.multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), -screenAngle * radians));
       if (!orientationBaselineRef.current) {
         orientationBaselineRef.current = raw.clone();
         cameraBaselineRef.current = camera.quaternion.clone();
