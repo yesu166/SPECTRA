@@ -1,18 +1,18 @@
 # SPECTRA Combined Simulator
 
-An offline-first training simulator concept combining a 2D tactical awareness display with a synchronized 3D digital twin.
+An offline-capable prototype combining a 2D tactical awareness display with a synchronized 3D digital twin for synthetic counter-UAS operator training.
 
-## Current slice
+## Included in this build
 
-- Multiple synthetic scenario templates: perimeter, rural site, urban site, multi-contact.
-- Environment controls for setting, lighting, visibility, scenario seed and event density.
-- Deterministic seeded scenario variation.
-- A simulated observation feed with uncertainty and occasional missing observations.
-- Synchronized tactical map and Three.js 3D scene using the same scenario state.
-- Pause, resume, step and reset controls.
-- Event timeline, session persistence in browser localStorage, and replay selection.
-- This version is a simulation prototype only. It does not connect to real sensors or countermeasure hardware.
-- The decision-tree scoring engine is intentionally deferred to a later phase.
+- Four scenario templates: perimeter watch, urban observation, rural site and multi-contact exercise.
+- Environment controls for urban/rural/perimeter, day/dusk/night, clear/haze/fog, synthetic sensor quality, difficulty and contact count.
+- Seeded contact generation for reproducible scenario setup.
+- A synthetic observation feed with tracks, intermittent observations and observation gaps.
+- Synchronized 2D tactical map and 3D environment using the same entity state.
+- Pause/resume, single-step and reset controls.
+- Browser-local session history and JSON AAR export.
+- Generic illustrative virtual sensor panel. No real sensor or countermeasure hardware is connected.
+- Decision-tree scoring is intentionally deferred to a later phase.
 
 ## Run locally
 
@@ -23,20 +23,26 @@ npm install
 npm run dev
 ```
 
-For a production build:
+Open the local URL printed by Vite.
+
+Build and type-check:
 
 ```bash
+npm run typecheck
 npm run build
-npm run preview
 ```
 
-The UI and simulation run locally after dependencies are installed. No backend or network service is required at runtime.
+The source uses no remote API at runtime. After dependencies are installed, the simulation runs locally. All scenario and sensor data are synthetic; sensor behaviour is abstract and is not a validated physical model.
 
 ## Project layout
 
-- `src/simulation.ts`: deterministic synthetic scenario generation and simulation state.
-- `src/App.tsx`: dashboard and operator workflow.
-- `src/components/TacticalMap.tsx`: 2D situational-awareness view.
-- `src/components/DigitalTwin.tsx`: 3D visualization of the same entities.
-- `src/components/AfterActionReview.tsx`: event history and session replay selection.
-- `src/styles.css`: visual system.
+- `src/simulation.ts`: types, seeded scenario generation, synthetic observations and entity motion.
+- `src/App.tsx`: controls, operator workstation, session storage and export.
+- `src/components/TacticalMap.tsx`: 2D tactical awareness view.
+- `src/components/DigitalTwin.tsx`: Three.js 3D environment.
+- `src/components/AfterActionReview.tsx`: event timeline and saved-session selection.
+- `src/styles.css`: interface styling.
+
+## Current boundaries
+
+This is a frontend prototype. It does not yet implement decision-tree scoring, a backend, multi-user networking, real-world sensor fusion, physical sensor integration or operational countermeasure control. Session history is local to the browser profile, not a shared training database.
