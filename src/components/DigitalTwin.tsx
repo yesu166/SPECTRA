@@ -13,7 +13,7 @@ interface Props {
   onSelect: (id: string) => void;
   elapsedSeconds: number;
   isRunning: boolean;
-  onToggleSimulation: () => void;
+  onToggleSimulation: (inputMethod?: InputMethod) => void;
   onTraineeAction: (
     action: TraineeAction,
     confidence: ConfidenceLevel,
@@ -135,7 +135,7 @@ export default function DigitalTwin({
     contactId = selectionRef.current ?? undefined,
   ) => {
     if (spec.simulationControl) {
-      toggleSimulationRef.current();
+      toggleSimulationRef.current(inputMethod);
       return;
     }
     if (spec.exit) {
@@ -550,7 +550,7 @@ export default function DigitalTwin({
           <div className="phone-hud-heading">
             <div><span>SPECTRA · PHONE MOTION</span><strong>T+{timeLabel(elapsedSeconds)}</strong></div>
             <div className="phone-hud-run-controls">
-              <button onPointerUp={() => toggleSimulationRef.current()}>{isRunning ? "PAUSE" : elapsedSeconds > 0 ? "RESUME" : "START"}</button>
+              <button onPointerUp={(event) => toggleSimulationRef.current(event.pointerType === "touch" ? "touch" : "mouse")}>{isRunning ? "PAUSE" : elapsedSeconds > 0 ? "RESUME" : "START"}</button>
               <button onPointerUp={(event) => fire({ label: "EXIT", exit: true }, event)}>EXIT</button>
             </div>
           </div>
