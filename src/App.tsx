@@ -161,7 +161,7 @@ export default function App() {
 
   const resetScenario = useCallback((cfg: Config, announce = true) => {
     if (frameRef.current !== null) cancelAnimationFrame(frameRef.current);
-    intervalRef.current = null;
+    frameRef.current = null;
     setRunning(false);
     tickRef.current = 0; elapsedRef.current = 0; eventCounter.current = 3;
     accumulatorRef.current = 0; publishAccumulatorRef.current = 0; lastFrameTimeRef.current = null;
@@ -177,7 +177,10 @@ export default function App() {
     if (announce) setNotice(`NEW EXERCISE · ${cfg.scenarioId.replaceAll("-", " ").toUpperCase()}`);
   }, [initialEvents]);
 
-  useEffect(() => () => { if (intervalRef.current !== null) window.clearInterval(intervalRef.current); }, []);
+  useEffect(() => () => {
+    if (frameRef.current !== null) cancelAnimationFrame(frameRef.current);
+    frameRef.current = null;
+  }, []);
 
   const simulationStep = useCallback(() => {
     const cfg = configRef.current;
@@ -345,7 +348,7 @@ export default function App() {
   };
 
   const loadSession = (session: SessionSnapshot) => {
-    if (intervalRef.current !== null) window.clearInterval(intervalRef.current);
+    if (frameRef.current !== null) cancelAnimationFrame(frameRef.current);
     frameRef.current = null; setRunning(false);
     setConfig(session.config); configRef.current = session.config;
     eventsRef.current = session.events; setEvents(session.events); eventCounter.current = session.events.length;
