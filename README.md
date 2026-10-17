@@ -84,6 +84,14 @@ Phone orientation sensors generally require a secure context (HTTPS, except loca
 
 The 3D HUD and touch buttons issue the same trainee actions and write the selected input method (mouse, touch or gaze) to the event timeline. All contact markers and decisions are based on trainee-visible synthetic observations; truth labels are not shown in the trainee HUD.
 
+## Real-time loop and diagnostics
+
+The exercise uses a fixed-step simulation clock targeting 30 updates per second. The rendering loop is separate and uses `requestAnimationFrame`; catch-up work is capped and timing is rebased when the browser tab becomes hidden. Sensor observations are sampled less frequently than motion updates. These are software targets, not a guarantee of 30 FPS or 30 updates/s on all hardware.
+
+Use **Performance diagnostics** below the session timeline while an exercise is running to view measured render FPS, simulation updates per second, and average frame time for that local device.
+
+Scenario selection remains visible; environment, lighting, visibility, sensor quality, difficulty, contact count and seed are grouped under **Advanced settings**.
+
 ## Current boundaries
 
 This is an engineering prototype, not a validated training product. Its sensor model is illustrative, not calibrated to physical sensors. Decision-tree scoring and evidence-linked score explanations remain future work (the log records which observation event came from an additional-information request). Seekable synchronized replay, expert-reviewed decision rules, a backend and multi-user networking also remain future work. The browser-delivered code can be inspected; truth separation is an architectural separation, not a security boundary against a determined user. Phone motion and Cardboard stereo have not yet been validated across a matrix of physical phones, browsers and viewers.
