@@ -1,0 +1,35 @@
+name: SPECTRA Simulator
+
+on:
+  push:
+    paths:
+      - "spectra-simulator/**"
+      - ".github/workflows/spectra-simulator.yml"
+  pull_request:
+    paths:
+      - "spectra-simulator/**"
+      - ".github/workflows/spectra-simulator.yml"
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: spectra-simulator
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: spectra-simulator/package-lock.json
+      - name: Install
+        run: npm install
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Unit tests
+        run: npm test
+      - name: Build
+        run: npm run build
