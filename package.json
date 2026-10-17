@@ -8,7 +8,8 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview --host 127.0.0.1",
     "typecheck": "tsc --noEmit",
-    "test": "node scripts/check-simulation-boundary.mjs && vitest run"
+    "test": "node scripts/check-simulation-boundary.mjs && vitest run",
+    "test:smoke": "node scripts/smoke-test.mjs"
   },
   "dependencies": {
     "@vitejs/plugin-react": "^4.3.4",
@@ -24,6 +25,7 @@
     "@types/three": "^0.171.0",
     "typescript": "^5.7.2",
     "vite": "^6.0.5",
-    "vitest": "^2.1.8"
+    "vitest": "^2.1.8",
+    "playwright": "^1.56.1"
   }
 }
