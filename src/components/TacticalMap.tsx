@@ -53,6 +53,13 @@ export default function TacticalMap({ contacts, selectedId, onSelect, lighting }
           );
         })}
       </svg>
+      {visibleContacts.length === 0 && (
+        <div className="map-empty-state">
+          <span>NO CONTACT POSITION ACQUIRED</span>
+          <strong>Waiting for first synthetic observation</strong>
+          <p>Start the exercise to run the sensor sweep. Contacts appear only when an observation provides a location.</p>
+        </div>
+      )}
       <div className="map-compass"><span>N</span><span className="compass-arrow">↑</span></div>
       <div className="map-scale">SIMULATED COORDINATE GRID <span>GRID 1000 × 700</span></div>
       <div className="map-disclaimer">SYNTHETIC OBSERVATIONS · MEASURED OR LAST KNOWN POSITIONS{pendingCount > 0 ? ` · ${pendingCount} NOT YET LOCATED` : ""}</div>

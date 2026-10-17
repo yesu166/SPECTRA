@@ -40,6 +40,9 @@ No cloud service or API key is required at runtime. After dependencies are insta
 - Optional Cardboard-style side-by-side left/right-eye stereo mode for inexpensive phone viewers, with a gaze-and-hold 3D HUD.
 - Touch and gaze controls for observe, request more information, classify, report, escalate, authorise an abstract response, defer and set confidence.
 - Trainee actions record their input method (mouse, touch or gaze) in the session event log.
+- A desktop decision workflow for acknowledging contacts, requesting additional synthetic observations, classifying with confidence, reporting, escalating, deferring and authorising an abstract response.
+- An on-demand secondary synthetic camera sample that may improve a contact estimate or return unavailable under degraded conditions; event history links the request to the resulting observation event.
+- Mission briefing and per-contact latest-decision status; the initial waiting state explains how to start the exercise.
 - Start, pause and resume controls are available within phone and Cardboard views, so the exercise can be controlled without leaving immersive mode.
 
 ## Project structure
@@ -83,7 +86,7 @@ The 3D HUD and touch buttons issue the same trainee actions and write the select
 
 ## Current boundaries
 
-This is an engineering prototype, not a validated training product. Its sensor model is illustrative, not calibrated to physical sensors. Decision-tree scoring, evidence-linked score explanations, seekable synchronized replay, expert-reviewed decision rules, a backend and multi-user networking remain future work. The browser-delivered code can be inspected; truth separation is an architectural separation, not a security boundary against a determined user. Phone motion and Cardboard stereo have not yet been validated across a matrix of physical phones, browsers and viewers.
+This is an engineering prototype, not a validated training product. Its sensor model is illustrative, not calibrated to physical sensors. Decision-tree scoring and evidence-linked score explanations remain future work (the log records which observation event came from an additional-information request). Seekable synchronized replay, expert-reviewed decision rules, a backend and multi-user networking also remain future work. The browser-delivered code can be inspected; truth separation is an architectural separation, not a security boundary against a determined user. Phone motion and Cardboard stereo have not yet been validated across a matrix of physical phones, browsers and viewers.
 
 
 ## Contribution and validation

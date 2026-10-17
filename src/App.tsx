@@ -39,6 +39,7 @@ export default function App() {
   if (engineRef.current === null) engineRef.current = new SimulationSession(DEFAULT_CONFIG);
   const [contacts, setContacts] = useState<ContactView[]>(() => engineRef.current!.getContacts());
   const [selectedId, setSelectedId] = useState<string | null>("C-01");
+  const [operatorConfidence, setOperatorConfidence] = useState<ConfidenceLevel>("MEDIUM");
   const [running, setRunning] = useState(false);
   const [tick, setTick] = useState(0);
   const [elapsed, setElapsed] = useState(0);
@@ -73,6 +74,7 @@ export default function App() {
       eventsRef.current = next;
       return next;
     });
+    return event;
   }, []);
 
   const handleTraineeAction = useCallback((
@@ -92,16 +94,39 @@ export default function App() {
       CLASSIFY: "Contact classified",
       SET_CONFIDENCE: "Confidence setting changed",
     };
+    if (action === "SET_CONFIDENCE") setOperatorConfidence(confidence);
+
+    const evidenceEventIds: string[] = [];
+    if (action === "REQUEST_MORE_INFO" && contactId && tickRef.current > 0) {
+      const refreshedContacts = engineRef.current?.requestMoreInfo(contactId) ?? [];
+      setContacts(refreshedContacts);
+      const refreshed = refreshedContacts.find((item) => item.id === contactId);
+      if (refreshed) {
+        const available = refreshed.source !== "SIMULATED CAMERA" || refreshed.status !== "UNOBSERVED";
+        const evidence = record(
+          "OBSERVATION",
+          available ? "Secondary synthetic observation received" : "Secondary observation unavailable",
+          `${contactId} · ${refreshed.source ?? "SIMULATED CAMERA"} · ${refreshed.note ?? "No additional detail"} · confidence ${refreshed.confidence ?? 0}%`,
+          elapsedRef.current,
+          { contactId, tick: tickRef.current },
+        );
+        evidenceEventIds.push(evidence.id);
+      }
+    }
+
     const methodLabel = inputMethod === "gaze" ? "gaze-and-hold" : inputMethod;
     const details = [
       contactId ? `Contact ${contactId}` : "No contact selected",
       classification ? `classification ${classification.replaceAll("_", " ").toLowerCase()}` : "",
       `confidence ${confidence.toLowerCase()}`,
       `input ${methodLabel}`,
-      action === "REQUEST_MORE_INFO" ? "additional sensors are not yet simulated" : "",
+      action === "REQUEST_MORE_INFO"
+        ? (tickRef.current > 0 ? "secondary synthetic sample requested" : "start the exercise before requesting a sample")
+        : "",
     ].filter(Boolean).join(" · ");
     record("ACTION", titles[action], details, elapsedRef.current, {
       action, confidence, inputMethod, classification, contactId, tick: tickRef.current,
+      ...(evidenceEventIds.length ? { evidenceEventIds } : {}),
     });
     setNotice(`ACTION RECORDED · ${titles[action].toUpperCase()}`);
   }, [record]);
@@ -130,7 +155,7 @@ export default function App() {
     intervalRef.current = null;
     setRunning(false);
     tickRef.current = 0; elapsedRef.current = 0; eventCounter.current = 3;
-    setTick(0); setElapsed(0);
+    setTick(0); setElapsed(0); setOperatorConfidence("MEDIUM");
     const engine = new SimulationSession(cfg);
     engineRef.current = engine;
     const initialContacts = engine.getContacts();
@@ -182,6 +207,28 @@ export default function App() {
   const unobserved = contacts.filter((item) => item.status === "UNOBSERVED").length;
   const sensorHealth = Math.max(8, Math.min(100, config.sensorQuality - (config.visibility === "fog" ? 18 : config.visibility === "haze" ? 8 : 0) - (config.lighting === "night" ? 4 : 0)));
   const scenario = SCENARIOS.find((item) => item.id === config.scenarioId) ?? SCENARIOS[0];
+  const canOperate = tick > 0 && !!selected;
+  const actionEvents = events.filter((event) => event.type === "ACTION" && event.action);
+  const classifiedContactCount = new Set(actionEvents.filter((event) => event.action === "CLASSIFY" && event.contactId).map((event) => event.contactId)).size;
+  const reportedContactCount = new Set(actionEvents.filter((event) => event.action === "REPORT" && event.contactId).map((event) => event.contactId)).size;
+  const latestClassificationEvent = selected
+    ? events.slice().reverse().find((event) => event.contactId === selected.id && event.action === "CLASSIFY")
+    : undefined;
+  const latestContactAction = selected
+    ? events.slice().reverse().find((event) => event.contactId === selected.id && event.type === "ACTION" && event.action !== "SET_CONFIDENCE")
+    : undefined;
+  const latestDecisionByContact: Record<string, SessionEvent> = {};
+  for (const event of events) {
+    if (event.contactId && event.type === "ACTION" && event.action && event.action !== "SET_CONFIDENCE" && event.action !== "OBSERVE") {
+      latestDecisionByContact[event.contactId] = event;
+    }
+  }
+  const missionObjective = ({
+    "perimeter-watch": "Build a cautious contact picture. Confirm what the observations support; defer when evidence is insufficient.",
+    "urban-observation": "Work with interrupted observations. Record uncertainty rather than treating a missing return as proof of identity.",
+    "rural-site": "Acknowledge contact observations, compare additional evidence and avoid unsupported classification.",
+    "multi-contact": "Triage several synthetic contacts, investigate ambiguous observations and record evidence-based decisions.",
+  } as Record<string, string>)[config.scenarioId] ?? "Review the observation feed and make evidence-based decisions.";
 
   const saveSession = () => {
     const snapshot: SessionSnapshot = { id: `session-${Date.now()}`, startedAt: sessionStarted, config, duration: elapsedRef.current, events: eventsRef.current, contacts, tick: tickRef.current };
@@ -262,13 +309,35 @@ export default function App() {
               {label:"CURRENT TRACKS",value:tracked,tint:"mint",Icon:Radio,sub:"Current"},{label:"INTERMITTENT",value:intermittent,tint:"amber",Icon:Activity,sub:"Observation"},{label:"UNOBSERVED",value:unobserved,tint:"rose",Icon:AlertTriangle,sub:"Current tick"},{label:"SENSOR QUALITY",value:`${sensorHealth}%`,tint:"blue",Icon:Gauge,sub:"Synthetic"},
             ].map((metric) => <div className="metric-card" key={metric.label}><div className={`metric-icon ${metric.tint}`}><metric.Icon size={16}/></div><div><span>{metric.label}</span><strong>{typeof metric.value==="number"?metric.value.toString().padStart(2,"0"):metric.value}</strong></div><small>{metric.sub}</small></div>)}
           </div>
+          <section className="mission-brief">
+            <div className="mission-brief-icon"><Target size={17}/></div>
+            <div className="mission-brief-copy"><div className="eyebrow">OPERATOR TASK / {scenario.name.toUpperCase()}</div><strong>Build an evidence-based contact picture</strong><p>{missionObjective}</p><div className="mission-progress"><span>{tracked} tracked</span><span>{classifiedContactCount} classified</span><span>{reportedContactCount} reported</span><span>{actionEvents.length} decisions recorded</span></div></div>
+            <button className="mission-launch" onClick={() => !running ? toggleExercise("mouse") : selected ? handleTraineeAction("OBSERVE", operatorConfidence, "mouse", undefined, selected.id) : toggleExercise("mouse")}>{running ? "ACKNOWLEDGE CONTACT" : tick > 0 ? "RESUME EXERCISE" : "START EXERCISE"} {running ? <Check size={14}/> : <Play size={14}/>}</button>
+          </section>
           <div className="view-grid">
             <section className="panel map-panel"><div className="panel-heading"><div><div className="eyebrow">VIEW 01 / TACTICAL AWARENESS</div><h2>Contact map</h2></div><span className="live-label"><span className="live-dot"/>{running?"UPDATING":"STANDBY"}</span></div><TacticalMap contacts={contacts} selectedId={selectedId} onSelect={setSelectedId} lighting={config.lighting}/><div className="legend"><span><i className="legend-dot mint-dot"/> Track</span><span><i className="legend-dot amber-dot"/> Intermittent</span><span><i className="legend-dot rose-dot"/> Observation unavailable</span><span className="legend-note">Status reflects synthetic observations, not identity</span></div></section>
             <section className="panel twin-panel"><div className="panel-heading"><div><div className="eyebrow">VIEW 02 / DIGITAL TWIN</div><h2>Environment</h2></div><span className="view-tag"><Layers3 size={12}/> 3D VIEW</span></div><DigitalTwin contacts={contacts} config={config} selectedId={selectedId} onSelect={setSelectedId} elapsedSeconds={elapsed} isRunning={running} onToggleSimulation={toggleExercise} onTraineeAction={handleTraineeAction}/><div className="twin-footer"><span><span className="live-dot"/> Last-observed locations only</span><span>LIGHTING: {config.lighting.toUpperCase()}</span><span>VIS: {config.visibility.toUpperCase()}</span></div></section>
           </div>
           <div className="lower-grid">
-            <section className="panel contact-panel"><div className="panel-heading"><div><div className="eyebrow">SYNTHETIC SENSOR FEED</div><h2>Contact register</h2></div><span className="count-pill">{contacts.length} CONTACTS</span></div><div className="contact-table-wrap"><table className="contact-table"><thead><tr><th>CONTACT</th><th>OBSERVATION</th><th>CONF.</th><th>ALT.</th><th>SELECT</th></tr></thead><tbody>{contacts.slice(0,8).map((contact) => {const status=contact.status;return <tr key={contact.id} className={selectedId===contact.id?"selected-row":""} onClick={()=>setSelectedId(contact.id)}><td><span className={`entity-dot ${status==="TRACK"?"track":status==="INTERMITTENT"?"intermittent":status==="UNOBSERVED"?"unobserved":"pending"}`}/><strong>{contact.id}</strong><small>{status==="TRACK"?"TRACK OBSERVED":status==="INTERMITTENT"?"INTERMITTENT":status==="UNOBSERVED"?"NO OBSERVATION":"AWAITING OBSERVATION"}</small></td><td><span className={`observation-pill ${status?.toLowerCase()??"pending"}`}>{status??"PENDING"}</span></td><td>{contact.confidence !== undefined ? `${contact.confidence}%` : "—"}</td><td>{contact.altitude !== undefined ? `${contact.altitude} m (observed)` : "—"}</td><td><button className="mini-select" onClick={(event)=>{event.stopPropagation();setSelectedId(contact.id)}}>{selectedId===contact.id?<Check size={13}/>:<Eye size={13}/>}</button></td></tr>})}</tbody></table></div><div className="contact-footer"><span>SELECTION: {selectedId??"NONE"}</span><span>OBSERVATIONS ARE SIMULATED</span></div></section>
-            <section className="panel detail-panel"><div className="panel-heading"><div><div className="eyebrow">CONTACT INSPECTOR</div><h2>Observation details</h2></div><Crosshair size={17} className="muted-icon"/></div>{selected?<div className="detail-content"><div className="detail-title"><span className="detail-symbol"><Target size={19}/></span><div><strong>{selected.id}</strong><span>Sensor contact · identity not confirmed</span></div></div><div className="detail-stats"><div><span>ALTITUDE</span><strong>{selected.altitude !== undefined ? `${selected.altitude} m (observed)` : "—"}</strong></div><div><span>OBSERVATION</span><strong>{selectedObservation?.status??"PENDING"}</strong></div><div><span>CONFIDENCE</span><strong>{selectedObservation?`${selectedObservation.confidence}%`:"—"}</strong></div></div><div className="detail-note"><div className="note-icon"><Waves size={14}/></div><p>{selectedObservation?.note??"No observation recorded yet. Start the exercise to populate the synthetic feed."}</p></div><div className="evidence-label">AVAILABLE EVIDENCE</div><div className="evidence-row"><span>Source</span><strong>Simulated sensor</strong></div><div className="evidence-row"><span>Reported identity</span><strong>{selectedObservation?.status==="TRACK"?"Unconfirmed by sensor":"Insufficient observation"}</strong></div><div className="evidence-row"><span>Ground truth</span><strong>Not available in operator view</strong></div></div>:<div className="empty-state">Select a contact to inspect its observations.</div>}</section>
+            <section className="panel contact-panel"><div className="panel-heading"><div><div className="eyebrow">SYNTHETIC SENSOR FEED</div><h2>Contact register</h2></div><span className="count-pill">{contacts.length} CONTACTS</span></div><div className="contact-table-wrap"><table className="contact-table"><thead><tr><th>CONTACT</th><th>OBSERVATION</th><th>CONF.</th><th>ALT.</th><th>SELECT</th></tr></thead><tbody>{contacts.slice(0,8).map((contact) => {const status=contact.status;const decision=latestDecisionByContact[contact.id];return <tr key={contact.id} className={selectedId===contact.id?"selected-row":""} onClick={()=>setSelectedId(contact.id)}><td><span className={`entity-dot ${status==="TRACK"?"track":status==="INTERMITTENT"?"intermittent":status==="UNOBSERVED"?"unobserved":"pending"}`}/><strong>{contact.id}</strong><small>{status==="TRACK"?"TRACK OBSERVED":status==="INTERMITTENT"?"INTERMITTENT":status==="UNOBSERVED"?"NO OBSERVATION":"AWAITING OBSERVATION"}</small><small className="contact-decision-tag">{decision?.title ?? "NO DECISION YET"}</small></td><td><span className={`observation-pill ${status?.toLowerCase()??"pending"}`}>{status??"PENDING"}</span></td><td>{contact.confidence !== undefined ? `${contact.confidence}%` : "—"}</td><td>{contact.altitude !== undefined ? `${contact.altitude} m (observed)` : "—"}</td><td><button className="mini-select" onClick={(event)=>{event.stopPropagation();setSelectedId(contact.id)}}>{selectedId===contact.id?<Check size={13}/>:<Eye size={13}/>}</button></td></tr>})}</tbody></table></div><div className="contact-footer"><span>SELECTION: {selectedId??"NONE"}</span><span>OBSERVATIONS ARE SIMULATED</span></div></section>
+            <section className="panel detail-panel"><div className="panel-heading"><div><div className="eyebrow">CONTACT INSPECTOR</div><h2>Observation details</h2></div><Crosshair size={17} className="muted-icon"/></div>{selected?<div className="detail-content"><div className="detail-title"><span className="detail-symbol"><Target size={19}/></span><div><strong>{selected.id}</strong><span>Sensor contact · identity not confirmed</span></div></div><div className="detail-stats"><div><span>ALTITUDE</span><strong>{selected.altitude !== undefined ? `${selected.altitude} m (observed)` : "—"}</strong></div><div><span>OBSERVATION</span><strong>{selectedObservation?.status??"PENDING"}</strong></div><div><span>CONFIDENCE</span><strong>{selectedObservation?`${selectedObservation.confidence}%`:"—"}</strong></div></div><div className="detail-note"><div className="note-icon"><Waves size={14}/></div><p>{selectedObservation?.note??"No observation recorded yet. Start the exercise to populate the synthetic feed."}</p></div><div className="evidence-label">AVAILABLE EVIDENCE</div><div className="evidence-row"><span>Source</span><strong>{selectedObservation?.source ?? "Awaiting synthetic sample"}</strong></div><div className="evidence-row"><span>Reported identity</span><strong>{selectedObservation?.status==="TRACK"?"Unconfirmed by sensor":selectedObservation?.status==="INTERMITTENT"?"Low continuity · identity unknown":"Insufficient observation"}</strong></div><div className="evidence-row"><span>Ground truth</span><strong>Not available in operator view</strong></div>
+              <div className="operator-actions">
+                <div className="operator-actions-heading"><div><div className="eyebrow">TRAINEE DECISION WORKFLOW</div><strong>Investigate · classify · report</strong></div><span className={canOperate?"decision-ready":"decision-locked"}>{canOperate?"READY":"START FIRST"}</span></div>
+                <div className="operator-state-row"><span>Current classification</span><strong>{latestClassificationEvent?.classification ? latestClassificationEvent.classification.replaceAll("_"," ") : "NOT CLASSIFIED"}</strong></div>
+                <div className="operator-state-row"><span>Last decision</span><strong>{latestContactAction?.title ?? "NO DECISION YET"}</strong></div>
+                <div className="operator-confidence"><span>CONFIDENCE</span>{(["LOW","MEDIUM","HIGH"] as const).map((level) => <button key={level} disabled={!canOperate} className={operatorConfidence===level?"active":""} onPointerUp={(event) => handleTraineeAction("SET_CONFIDENCE",level,event.pointerType==="touch"?"touch":"mouse",undefined,selected.id)}>{level}</button>)}</div>
+                <div className="operator-label">CLASSIFICATION</div>
+                <div className="operator-classify-grid">
+                  {([{value:"POSSIBLE_DRONE",label:"Possible drone"},{value:"NON_DRONE",label:"Non-drone"},{value:"UNKNOWN",label:"Unknown / defer"}] as const).map((item) => <button key={item.value} disabled={!canOperate} onPointerUp={(event) => handleTraineeAction("CLASSIFY",operatorConfidence,event.pointerType==="touch"?"touch":"mouse",item.value,selected.id)}>{item.label}</button>)}
+                </div>
+                <div className="operator-label">ACTION</div>
+                <div className="operator-action-grid">
+                  {([{action:"OBSERVE",label:"Acknowledge"},{action:"REQUEST_MORE_INFO",label:"Request more info"},{action:"REPORT",label:"Report"},{action:"ESCALATE",label:"Escalate"},{action:"AUTHORIZE_RESPONSE",label:"Authorize abstract response"},{action:"DEFER",label:"Defer decision"}] as const).map((item) => <button key={item.action} disabled={!canOperate} className={item.action==="AUTHORIZE_RESPONSE"?"operator-action-warn":item.action==="DEFER"?"operator-action-defer":""} onPointerUp={(event) => handleTraineeAction(item.action,operatorConfidence,event.pointerType==="touch"?"touch":"mouse",undefined,selected.id)}>{item.label}</button>)}
+                </div>
+                {!canOperate && <p className="operator-locked-note">Start the exercise to begin receiving synthetic observations and enable trainee decisions.</p>}
+                {canOperate && <p className="operator-locked-note">Training-only controls. Decisions are recorded locally; no real sensor, aircraft or countermeasure is connected.</p>}
+              </div>
+            </div>:<div className="empty-state">Select a contact to inspect its observations.</div>}</section>
           </div>
           <div className="event-banner"><div className="banner-icon"><Activity size={15}/></div><span>{notice}</span><span className="banner-time">{timeLabel(elapsed)} SIM TIME</span></div>
         </section>

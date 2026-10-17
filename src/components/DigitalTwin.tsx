@@ -586,6 +586,13 @@ export default function DigitalTwin({
         </div>
       )}
       {viewMode === "cardboard" && <div className="cardboard-gaze-tip"><span className="gaze-reticle" /> Look at a 3D button and hold for 1.1 seconds to select it. Remove the phone from the viewer and return to Phone VR to exit if needed.</div>}
+      {contacts.every((contact) => typeof contact.x !== "number" || typeof contact.y !== "number") && (
+        <div className="twin-empty-state">
+          <span>{elapsedSeconds > 0 ? "SYNTHETIC SENSOR SWEEP" : "SIMULATION STANDBY"}</span>
+          <strong>No contact positions acquired</strong>
+          <p>{elapsedSeconds > 0 ? "The synthetic sensor has not provided a usable position yet." : "Start the exercise to generate observations and populate the environment with contact markers."}</p>
+        </div>
+      )}
       <div ref={hostRef} className="three-host" />
     </div>
   );
