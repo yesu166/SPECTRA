@@ -141,6 +141,13 @@ export default function App() {
 
   const toggleExercise = useCallback((inputMethod: InputMethod = "mouse") => {
     const nextRunning = !running;
+    if (!nextRunning) {
+      setContacts(engineRef.current?.getContacts() ?? []);
+      setTick(tickRef.current);
+      setElapsed(elapsedRef.current);
+    }
+    lastFrameTimeRef.current = null;
+    accumulatorRef.current = 0;
     setRunning(nextRunning);
     record(
       "SESSION",
