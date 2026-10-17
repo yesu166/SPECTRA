@@ -123,11 +123,15 @@ export class SimulationSession {
     });
   }
 
-  step(): ContactView[] {
+  step(deltaSeconds = 1 / 30): ContactView[] {
+    const dt = Math.max(0, Math.min(deltaSeconds, 0.1));
     this.#tick += 1;
-    this.#tracks = moveTruthTracks(this.#tracks, this.#tick);
+    this.#tracks = moveTruthTracks(this.#tracks, dt);
     for (const track of this.#tracks) {
-      const raw = observeTruth(this.config, track, this.#tick);
+      // Sensor sampling stays deterministic and intentionally slower than the motion loop.
+      if (this.#tick % 3 !== 0) continue;
+      const sampleTick = Math.floor(this.#tick / 3);
+      const raw = observeTruth(this.config, track, sampleTick);
       this.#observations.set(track.id, copyObservation(raw, this.#observations.get(track.id)));
     }
     return this.getContacts();

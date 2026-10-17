@@ -98,6 +98,7 @@ export default function DigitalTwin({
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
   const resizeRef = useRef<(() => void) | null>(null);
   const applyModeRef = useRef<((mode: ViewMode) => void) | null>(null);
+  const refreshContactsRef = useRef<(() => void) | null>(null);
   const recenterHudRef = useRef<(() => void) | null>(null);
   const callbackRef = useRef(onSelect);
   const actionRef = useRef(onTraineeAction);
@@ -226,6 +227,10 @@ export default function DigitalTwin({
   }, [viewMode]);
 
   useEffect(() => {
+    refreshContactsRef.current?.();
+  }, [contacts]);
+
+  useEffect(() => {
     if (viewMode === "cardboard") recenterHudRef.current?.();
     resizeRef.current?.();
   }, [viewMode]);
@@ -309,8 +314,10 @@ export default function DigitalTwin({
 
     const contactMeshes = new Map<string, THREE.Group>();
     const contactMaterials = new Map<string, THREE.MeshStandardMaterial>();
+    const contactById = new Map<string, ContactView>();
     const pickables: THREE.Object3D[] = [];
     contactRef.current.forEach((contact) => {
+      contactById.set(contact.id, contact);
       const group = new THREE.Group();
       const material = new THREE.MeshStandardMaterial({ color: 0xaebbc1, emissive: 0x41535b, emissiveIntensity: .18, roughness: .65 });
       const body = new THREE.Mesh(new THREE.OctahedronGeometry(.62, 0), material);
@@ -329,6 +336,7 @@ export default function DigitalTwin({
       contactMeshes.set(contact.id, group);
       contactMaterials.set(contact.id, material);
       pickables.push(body);
+      gazePickables.push(body);
     });
 
     const hudRoot = new THREE.Group();
@@ -336,6 +344,7 @@ export default function DigitalTwin({
     scene.add(hudRoot);
     const hudButtons: THREE.Mesh[] = [];
     const buttonSpecs = new Map<THREE.Object3D, HudButtonSpec>();
+    const gazePickables: THREE.Object3D[] = [];
     HUD_BUTTONS.forEach((spec, index) => {
       const row = Math.floor(index / 3);
       const column = index % 3;
@@ -346,6 +355,7 @@ export default function DigitalTwin({
       mesh.userData.hudAction = spec.label;
       hudRoot.add(mesh);
       hudButtons.push(mesh);
+      gazePickables.push(mesh);
       buttonSpecs.set(mesh, spec);
     });
     const statusDrawing = buildStatusTexture();
@@ -432,11 +442,19 @@ export default function DigitalTwin({
       statusDrawing.texture.needsUpdate = true;
     };
     let lastStatusSecond = -1;
+    const refreshContactCache = () => {
+      contactById.clear();
+      contactRef.current.forEach((contact) => { contactById.set(contact.id, contact); });
+    };
+    refreshContactsRef.current = refreshContactCache;
+    refreshContactCache();
+
+    const scratchPosition = new THREE.Vector3();
     const animate = () => {
       if (disposed) return;
       const mode = modeRef.current;
       contactMeshes.forEach((group, id) => {
-        const contact = contactRef.current.find((item) => item.id === id);
+        const contact = contactById.get(id);
         const status = contact?.status;
         const hasPosition = typeof contact?.x === "number" && typeof contact?.y === "number";
         group.visible = hasPosition;
@@ -457,7 +475,7 @@ export default function DigitalTwin({
         const second = Math.floor(elapsedRef.current);
         if (second !== lastStatusSecond) { drawStatus(elapsedRef.current); lastStatusSecond = second; }
         raycaster.setFromCamera(center, camera);
-        const hit = raycaster.intersectObjects([...hudButtons, ...pickables], false)[0]?.object ?? null;
+        const hit = raycaster.intersectObjects(gazePickables, false)[0]?.object ?? null;
         if (hit !== gazeTargetRef.current) {
           gazeTargetRef.current = hit;
           gazeStartRef.current = hit ? performance.now() : 0;
@@ -522,6 +540,7 @@ export default function DigitalTwin({
       rendererRef.current = null;
       resizeRef.current = null;
       applyModeRef.current = null;
+      refreshContactsRef.current = null;
       recenterHudRef.current = null;
     };
   }, [config.environment, config.lighting, config.visibility, contactKey, reportAction]);

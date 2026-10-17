@@ -47,7 +47,15 @@ export default function App() {
   const [sessions, setSessions] = useState<SessionSnapshot[]>(() => loadSessions());
   const [sessionStarted, setSessionStarted] = useState(new Date().toISOString());
   const [notice, setNotice] = useState("SIMULATION READY · SELECT A SCENARIO");
-  const intervalRef = useRef<number | null>(null);
+  const frameRef = useRef<number | null>(null);
+  const lastFrameTimeRef = useRef<number | null>(null);
+  const accumulatorRef = useRef(0);
+  const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [showPerformance, setShowPerformance] = useState(false);
+  const [perf, setPerf] = useState({ fps: 0, simHz: 0, frameMs: 0 });
+  const performanceRef = useRef({ frames: 0, steps: 0, frameMsSum: 0, windowStart: 0 });
+  const simulationHz = 30;
+  const fixedStepSeconds = 1 / simulationHz;
   const eventsRef = useRef<SessionEvent[]>([]);
   const tickRef = useRef(0);
   const elapsedRef = useRef(0);
@@ -133,6 +141,13 @@ export default function App() {
 
   const toggleExercise = useCallback((inputMethod: InputMethod = "mouse") => {
     const nextRunning = !running;
+    if (!nextRunning) {
+      setContacts(engineRef.current?.getContacts() ?? []);
+      setTick(tickRef.current);
+      setElapsed(elapsedRef.current);
+    }
+    lastFrameTimeRef.current = null;
+    accumulatorRef.current = 0;
     setRunning(nextRunning);
     record(
       "SESSION",
@@ -151,10 +166,11 @@ export default function App() {
   ], []);
 
   const resetScenario = useCallback((cfg: Config, announce = true) => {
-    if (intervalRef.current !== null) window.clearInterval(intervalRef.current);
-    intervalRef.current = null;
+    if (frameRef.current !== null) cancelAnimationFrame(frameRef.current);
+    frameRef.current = null;
     setRunning(false);
     tickRef.current = 0; elapsedRef.current = 0; eventCounter.current = 3;
+    accumulatorRef.current = 0; lastFrameTimeRef.current = null;
     setTick(0); setElapsed(0); setOperatorConfidence("MEDIUM");
     const engine = new SimulationSession(cfg);
     engineRef.current = engine;
@@ -167,27 +183,131 @@ export default function App() {
     if (announce) setNotice(`NEW EXERCISE · ${cfg.scenarioId.replaceAll("-", " ").toUpperCase()}`);
   }, [initialEvents]);
 
-  useEffect(() => () => { if (intervalRef.current !== null) window.clearInterval(intervalRef.current); }, []);
+  useEffect(() => () => {
+    if (frameRef.current !== null) cancelAnimationFrame(frameRef.current);
+    frameRef.current = null;
+  }, []);
 
-  const step = useCallback(() => {
+  const simulationStep = useCallback(() => {
     const cfg = configRef.current;
-    tickRef.current += 1; elapsedRef.current += 1;
+    tickRef.current += 1;
+    elapsedRef.current += fixedStepSeconds;
     const currentTick = tickRef.current;
-    const nextContacts = engineRef.current?.step() ?? [];
-    setContacts(nextContacts); setTick(currentTick); setElapsed(elapsedRef.current);
-    if (currentTick % 4 === 1 && nextContacts.length) {
-      const candidate = nextContacts[Math.floor((currentTick * 7 + cfg.seed) % nextContacts.length)];
-      if (candidate.status === "TRACK") record("DETECTION", `Contact observed · ${candidate.id}`, `Synthetic sensor observation · confidence ${candidate.confidence ?? 0}% · identity not inferred from sensor alone`, elapsedRef.current);
-      else record("SENSOR", `Observation gap · ${candidate.id}`, "No observation was available for this simulated tick.", elapsedRef.current);
+    const nextContacts = engineRef.current?.step(fixedStepSeconds) ?? [];
+    if (currentTick % 2 === 0) {
+      setContacts(nextContacts);
+      setTick(currentTick);
+      setElapsed(elapsedRef.current);
     }
-    if (currentTick % 12 === 0) record("SENSOR", "Sensor status update", `${nextContacts.filter((item) => item.status === "TRACK").length} current tracks · ${nextContacts.filter((item) => item.status === "UNOBSERVED").length} unobserved`, elapsedRef.current);
+    if (currentTick % simulationHz === 1 && nextContacts.length) {
+      const candidate = nextContacts[Math.floor((currentTick * 7 + cfg.seed) % nextContacts.length)];
+      if (candidate.status === "TRACK") record(
+        "DETECTION", `Contact observed · ${candidate.id}`,
+        `Synthetic sensor observation · confidence ${candidate.confidence ?? 0}% · identity not inferred from sensor alone`,
+        elapsedRef.current, { contactId: candidate.id, tick: currentTick },
+      );
+      else record(
+        "SENSOR", `Observation gap · ${candidate.id}`,
+        "No observation was available for this simulated tick.",
+        elapsedRef.current, { contactId: candidate.id, tick: currentTick },
+      );
+    }
+    if (currentTick % (simulationHz * 5) === 0) record(
+      "SENSOR", "Sensor status update",
+      `${nextContacts.filter((item) => item.status === "TRACK").length} current tracks · ${nextContacts.filter((item) => item.status === "UNOBSERVED").length} unobserved`,
+      elapsedRef.current, { tick: currentTick },
+    );
   }, [record]);
 
   useEffect(() => {
-    if (running) intervalRef.current = window.setInterval(step, 1000);
-    else if (intervalRef.current !== null) { window.clearInterval(intervalRef.current); intervalRef.current = null; }
-    return () => { if (intervalRef.current !== null) window.clearInterval(intervalRef.current); intervalRef.current = null; };
-  }, [running, step]);
+    if (!running) {
+      if (frameRef.current !== null) cancelAnimationFrame(frameRef.current);
+      frameRef.current = null;
+      lastFrameTimeRef.current = null;
+      accumulatorRef.current = 0;
+      return;
+    }
+
+    let alive = true;
+    const measurement = performanceRef.current;
+    let renderedFrames = 0;
+    let simulatedSteps = 0;
+    let accumulatedFrameMs = 0;
+    measurement.frames = 0;
+    measurement.steps = 0;
+    measurement.frameMsSum = 0;
+    measurement.windowStart = 0;
+    const MAX_FRAME_DELTA = 0.1;
+    const MAX_CATCH_UP_STEPS = 3;
+
+    const onVisibilityChange = () => {
+      lastFrameTimeRef.current = null;
+      accumulatorRef.current = 0;
+    };
+    const stepOnce = () => {
+      simulationStep();
+      setContacts(engineRef.current?.getContacts() ?? []);
+      setTick(tickRef.current);
+      setElapsed(elapsedRef.current);
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+
+    const frame = (now: number) => {
+      if (!alive) return;
+      const previous = lastFrameTimeRef.current;
+      lastFrameTimeRef.current = now;
+      const rawDelta = previous === null || document.hidden ? 0 : (now - previous) / 1000;
+      const delta = Math.max(0, Math.min(rawDelta, MAX_FRAME_DELTA));
+      if (!document.hidden) {
+        accumulatorRef.current += delta;
+        let steps = 0;
+        while (accumulatorRef.current >= fixedStepSeconds && steps < MAX_CATCH_UP_STEPS) {
+          simulationStep();
+          accumulatorRef.current -= fixedStepSeconds;
+          steps += 1;
+          simulatedSteps += 1;
+        }
+        if (steps === MAX_CATCH_UP_STEPS && accumulatorRef.current >= fixedStepSeconds) {
+          // Drop excessive backlog to avoid the spiral of death on slow machines.
+          accumulatorRef.current = Math.min(accumulatorRef.current, fixedStepSeconds * 0.5);
+        }
+      }
+      renderedFrames += 1;
+      measurement.frames = renderedFrames;
+      measurement.steps = simulatedSteps;
+      accumulatedFrameMs += Math.max(0, now - (previous ?? now));
+      measurement.frameMsSum = accumulatedFrameMs;
+      if (measurement.windowStart === 0) measurement.windowStart = now;
+      if (now - measurement.windowStart >= 500) {
+        const span = Math.max(0.001, (now - measurement.windowStart) / 1000);
+        if (showPerformance) {
+          setPerf({
+            fps: Math.round(measurement.frames / span),
+            simHz: Math.round(measurement.steps / span),
+            frameMs: Number((measurement.frameMsSum / Math.max(1, measurement.frames)).toFixed(1)),
+          });
+        }
+        renderedFrames = 0;
+        simulatedSteps = 0;
+        accumulatedFrameMs = 0;
+        measurement.frames = 0;
+        measurement.steps = 0;
+        measurement.frameMsSum = 0;
+        measurement.windowStart = now;
+      }
+      frameRef.current = requestAnimationFrame(frame);
+    };
+
+    frameRef.current = requestAnimationFrame(frame);
+    return () => {
+      alive = false;
+      if (frameRef.current !== null) cancelAnimationFrame(frameRef.current);
+      frameRef.current = null;
+      lastFrameTimeRef.current = null;
+      accumulatorRef.current = 0;
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
+  }, [running, simulationStep, showPerformance]);
 
   const updateConfig = (patch: Partial<Config>) => {
     const next = { ...config, ...patch };
@@ -241,8 +361,8 @@ export default function App() {
   };
 
   const loadSession = (session: SessionSnapshot) => {
-    if (intervalRef.current !== null) window.clearInterval(intervalRef.current);
-    intervalRef.current = null; setRunning(false);
+    if (frameRef.current !== null) cancelAnimationFrame(frameRef.current);
+    frameRef.current = null; setRunning(false);
     setConfig(session.config); configRef.current = session.config;
     eventsRef.current = session.events; setEvents(session.events); eventCounter.current = session.events.length;
     setElapsed(session.duration); elapsedRef.current = session.duration;
@@ -285,22 +405,29 @@ export default function App() {
       </header>
       <main className="workspace">
         <aside className="control-rail">
-          <div className="rail-heading"><Settings2 size={15}/><span>EXERCISE CONTROL</span></div>
-          <label className="field-label">SCENARIO TEMPLATE</label>
-          <div className="select-wrap"><select value={config.scenarioId} onChange={(event) => chooseScenario(event.target.value)}>{SCENARIOS.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select><ChevronDown size={14}/></div>
-          <p className="control-help">{scenario.description}</p>
-          <label className="field-label">ENVIRONMENT</label>
-          <div className="segmented">{([["urban","Urban",Grid2X2],["rural","Rural",Wind],["perimeter","Site",Map]] as const).map(([value,label,Icon]) => <button key={value} className={config.environment===value?"active":""} onClick={() => updateConfig({environment:value})}><Icon size={13}/>{label}</button>)}</div>
-          <label className="field-label">LIGHTING</label>
-          <div className="segmented">{([["day","Day",Sun],["dusk","Dusk",SunMoon],["night","Night",Moon]] as const).map(([value,label,Icon]) => <button key={value} className={config.lighting===value?"active":""} onClick={() => updateConfig({lighting:value})}><Icon size={13}/>{label}</button>)}</div>
-          <label className="field-label">VISIBILITY CONDITIONS</label>
-          <div className="segmented">{(["clear","haze","fog"] as const).map((value) => <button key={value} className={config.visibility===value?"active":""} onClick={() => updateConfig({visibility:value})}>{value==="clear"?"Clear":value==="haze"?"Haze":"Fog"}</button>)}</div>
-          <div className="range-label"><label className="field-label">SENSOR QUALITY</label><strong>{config.sensorQuality}%</strong></div><input aria-label="Sensor quality" className="range-input" type="range" min="25" max="100" step="5" value={config.sensorQuality} onChange={(event) => updateConfig({sensorQuality:Number(event.target.value)})}/><div className="range-ends"><span>DEGRADED</span><span>NOMINAL</span></div>
-          <div className="range-label"><label className="field-label">DIFFICULTY</label><strong>LEVEL {config.difficulty}</strong></div><input aria-label="Difficulty" className="range-input" type="range" min="1" max="5" value={config.difficulty} onChange={(event) => updateConfig({difficulty:Number(event.target.value)})}/><div className="range-ends"><span>INTRO</span><span>CHALLENGE</span></div>
-          <div className="range-label"><label className="field-label">CONTACT COUNT</label><strong>{config.contactCount}</strong></div><input aria-label="Contact count" className="range-input" type="range" min="1" max="18" value={config.contactCount} onChange={(event) => updateConfig({contactCount:Number(event.target.value)})}/><div className="range-ends"><span>SINGLE</span><span>MULTI-CONTACT</span></div>
-          <label className="field-label">SCENARIO SEED</label><div className="seed-control"><input type="number" min="1" max="99999999" value={config.seed} onChange={(event) => updateConfig({seed:Number(event.target.value)||1})}/><button title="Generate a new procedural variant" onClick={generateVariant}><RotateCcw size={14}/></button></div>
-          <button className="secondary-button full-width" onClick={() => resetScenario(config)}><RotateCcw size={14}/> Apply settings & reset</button>
-          <div className="rail-bottom"><div className="offline-lock"><Shield size={15}/><div><strong>Offline-capable</strong><span>All entities and sensor reports are synthetic.</span></div></div><button className="text-button" onClick={() => setNotice("SPECTRA PROTOTYPE · SCORING TREE IS A FUTURE PHASE")}><CircleHelp size={13}/> About this build</button></div>
+          <div className="rail-heading"><Target size={15}/><span>TRAINING WORKSPACE</span></div>
+          <div className="quick-scenario">
+            <label className="field-label" htmlFor="scenario-template">EXERCISE</label>
+            <div className="select-wrap"><select id="scenario-template" value={config.scenarioId} onChange={(event) => chooseScenario(event.target.value)}>{SCENARIOS.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select><ChevronDown size={14}/></div>
+            <p className="control-help">{scenario.description}</p>
+          </div>
+          <button className="advanced-settings-toggle" aria-expanded={advancedOpen} onClick={() => setAdvancedOpen((open) => !open)}>
+            <span><Settings2 size={14}/> Advanced settings</span><span>{advancedOpen ? "Hide" : "Configure"} <ChevronDown size={13} className={advancedOpen ? "rotate-chevron" : ""}/></span>
+          </button>
+          {advancedOpen && <div className="advanced-settings-panel">
+            <label className="field-label">ENVIRONMENT</label>
+            <div className="segmented">{([["urban","Urban",Grid2X2],["rural","Rural",Wind],["perimeter","Site",Map]] as const).map(([value,label,Icon]) => <button key={value} className={config.environment===value?"active":""} onClick={() => updateConfig({environment:value})}><Icon size={13}/>{label}</button>)}</div>
+            <label className="field-label">LIGHTING</label>
+            <div className="segmented">{([["day","Day",Sun],["dusk","Dusk",SunMoon],["night","Night",Moon]] as const).map(([value,label,Icon]) => <button key={value} className={config.lighting===value?"active":""} onClick={() => updateConfig({lighting:value})}><Icon size={13}/>{label}</button>)}</div>
+            <label className="field-label">VISIBILITY</label>
+            <div className="segmented">{(["clear","haze","fog"] as const).map((value) => <button key={value} className={config.visibility===value?"active":""} onClick={() => updateConfig({visibility:value})}>{value==="clear"?"Clear":value==="haze"?"Haze":"Fog"}</button>)}</div>
+            <div className="range-label"><label className="field-label">SENSOR QUALITY</label><strong>{config.sensorQuality}%</strong></div><input aria-label="Sensor quality" className="range-input" type="range" min="25" max="100" step="5" value={config.sensorQuality} onChange={(event) => updateConfig({sensorQuality:Number(event.target.value)})}/>
+            <div className="range-label"><label className="field-label">DIFFICULTY</label><strong>LEVEL {config.difficulty}</strong></div><input aria-label="Difficulty" className="range-input" type="range" min="1" max="5" value={config.difficulty} onChange={(event) => updateConfig({difficulty:Number(event.target.value)})}/>
+            <div className="range-label"><label className="field-label">CONTACT COUNT</label><strong>{config.contactCount}</strong></div><input aria-label="Contact count" className="range-input" type="range" min="1" max="18" value={config.contactCount} onChange={(event) => updateConfig({contactCount:Number(event.target.value)})}/>
+            <label className="field-label">SCENARIO SEED</label><div className="seed-control"><input type="number" min="1" max="99999999" value={config.seed} onChange={(event) => updateConfig({seed:Number(event.target.value)||1})}/><button title="Generate a new procedural variant" onClick={generateVariant}><RotateCcw size={14}/></button></div>
+            <button className="secondary-button full-width" onClick={() => resetScenario(config)}><RotateCcw size={14}/> Apply settings & reset</button>
+          </div>}
+          <div className="rail-bottom"><div className="offline-lock"><Shield size={15}/><div><strong>Local training</strong><span>Synthetic contacts · no live sensor connection.</span></div></div><button className="text-button" onClick={() => setNotice("SPECTRA PROTOTYPE · DECISIONS ARE RECORDED, FORMAL SCORING IS NOT YET VALIDATED")}><CircleHelp size={13}/> About this build</button></div>
         </aside>
         <section className="main-column">
           <div className="page-intro"><div><div className="eyebrow">COMMAND & TRAINING / WORKSPACE 01</div><h1>Common operating picture</h1><p>Observation-derived awareness across 2D and 3D views.</p></div><div className="intro-actions"><span className="seed-chip">SEED <b>{config.seed}</b></span><span className="status-chip"><span className="status-dot"/> {running?"EXERCISE RUNNING":"EXERCISE PAUSED"}</span></div></div>
@@ -342,10 +469,14 @@ export default function App() {
           <div className="event-banner"><div className="banner-icon"><Activity size={15}/></div><span>{notice}</span><span className="banner-time">{timeLabel(elapsed)} SIM TIME</span></div>
         </section>
         <aside className="right-column">
-          <section className="panel run-panel"><div className="panel-heading"><div><div className="eyebrow">SESSION CONTROL</div><h2>Exercise runner</h2></div><span className="count-pill">LOCAL</span></div><div className="session-clock"><span>ELAPSED SIM TIME</span><strong>{timeLabel(elapsed)}</strong><div><span className={running?"running-dot":"paused-dot"}/>{running?"SIMULATION RUNNING":"SIMULATION PAUSED"}</div></div><div className="runner-actions"><button className={running?"pause-button":"run-button"} onClick={() => toggleExercise("mouse")}>{running?<><Pause size={15}/> Pause</>:<><Play size={15}/>{tick>0?"Resume exercise":"Start exercise"}</>}</button><button className="icon-button" title="Advance one simulation tick" onClick={()=>{if(!running)step()}}><Clock3 size={15}/></button><button className="icon-button" title="Reset scenario" onClick={()=>resetScenario(config)}><RotateCcw size={15}/></button></div><div className="runner-secondary"><button onClick={saveSession}><Save size={14}/> Save session</button><button onClick={exportAar}><ArrowDownToLine size={14}/> Export AAR</button></div></section>
+          <section className="panel run-panel"><div className="panel-heading"><div><div className="eyebrow">SESSION CONTROL</div><h2>Exercise runner</h2></div><span className="count-pill">LOCAL</span></div><div className="session-clock"><span>ELAPSED SIM TIME</span><strong>{timeLabel(elapsed)}</strong><div><span className={running?"running-dot":"paused-dot"}/>{running?"SIMULATION RUNNING":"SIMULATION PAUSED"}</div></div><div className="runner-actions"><button className={running?"pause-button":"run-button"} onClick={() => toggleExercise("mouse")}>{running?<><Pause size={15}/> Pause</>:<><Play size={15}/>{tick>0?"Resume exercise":"Start exercise"}</>}</button><button className="icon-button" title="Advance one simulation tick" onClick={()=>{if(!running){simulationStep();setContacts(engineRef.current?.getContacts()??[]);setTick(tickRef.current);setElapsed(elapsedRef.current)}}}><Clock3 size={15}/></button><button className="icon-button" title="Reset scenario" onClick={()=>resetScenario(config)}><RotateCcw size={15}/></button></div><div className="runner-secondary"><button onClick={saveSession}><Save size={14}/> Save session</button><button onClick={exportAar}><ArrowDownToLine size={14}/> Export AAR</button></div></section>
           <section className="panel equipment-panel"><div className="panel-heading"><div><div className="eyebrow">VIRTUAL EQUIPMENT</div><h2>Simulated sensor</h2></div><span className="equipment-chip"><span className="live-dot"/> READY</span></div><div className="device-illustration"><div className="device-screen"><span>SIM / SENSOR-01</span><div className="device-wave"><i/><i/><i/><i/><i/><i/><i/><i/><i/><i/></div><strong>{sensorHealth}%</strong><small>SYNTHETIC STATUS</small></div><div className="device-body"><span/><span/><span/><i/><i/><i/></div></div><div className="device-state"><span>DEVICE STATE</span><strong>SIMULATED · NO HARDWARE</strong></div><div className="device-state"><span>OBSERVATION QUALITY</span><strong>{config.sensorQuality}% configured</strong></div><p className="device-disclaimer">Illustrative training control only. No actual sensing or countermeasure function.</p></section>
           <section className="panel environment-panel"><div className="panel-heading"><div><div className="eyebrow">ENVIRONMENT STATE</div><h2>Current conditions</h2></div><Sun size={16} className="muted-icon"/></div><div className="env-state-grid"><div><span>SETTING</span><strong>{config.environment.toUpperCase()}</strong></div><div><span>LIGHTING</span><strong>{config.lighting.toUpperCase()}</strong></div><div><span>VISIBILITY</span><strong>{config.visibility.toUpperCase()}</strong></div><div><span>DIFFICULTY</span><strong>LEVEL {config.difficulty}</strong></div></div><div className="environment-note"><Wind size={14}/><span>{config.visibility==="fog"?"Fog enabled: synthetic observation dropout increases.":config.visibility==="haze"?"Haze enabled: observation confidence is reduced.":"Clear conditions: baseline synthetic visibility."}</span></div></section>
           <AfterActionReview events={events} sessions={sessions} onLoadSession={loadSession}/>
+          <div className="developer-diagnostics">
+            <button className="diagnostics-toggle" aria-expanded={showPerformance} onClick={() => setShowPerformance((visible) => !visible)}><Gauge size={13}/> Performance diagnostics <span>{showPerformance ? "Hide" : "Show"}</span></button>
+            {showPerformance && <div className="diagnostics-readout"><div><span>Rendered FPS</span><strong>{running ? perf.fps || "Measuring…" : "Paused"}</strong></div><div><span>Simulation updates / sec</span><strong>{running ? perf.simHz || "Measuring…" : "Paused"}</strong></div><div><span>Average frame delta</span><strong>{running ? `${perf.frameMs} ms` : "Paused"}</strong></div><p>Measured locally while the exercise is running. Target simulation step: 30 Hz. Actual rendering rate depends on this device.</p></div>}
+          </div>
           <div className="prototype-note"><Shield size={13}/><span><strong>Prototype boundary</strong> Synthetic entities and observations only. No live sensor data, operational engagement logic or countermeasure control.</span></div>
         </aside>
       </main>
