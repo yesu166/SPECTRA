@@ -16,6 +16,10 @@ import {
   type Config,
   type EnvironmentKind,
   type Lighting,
+  type InputMethod,
+  type ConfidenceLevel,
+  type ContactClassification,
+  type TraineeAction,
   type RawObservation,
   type SensorStatus,
   type SessionEvent,
@@ -24,7 +28,10 @@ import {
 } from "./simulationCore";
 
 export { DEFAULT_CONFIG, SCENARIOS, createEvent, scenarioFor };
-export type { Config, EnvironmentKind, Lighting, SensorStatus, SessionEvent, Visibility };
+export type {
+  Config, EnvironmentKind, Lighting, SensorStatus, SessionEvent, Visibility,
+  InputMethod, ConfidenceLevel, ContactClassification, TraineeAction,
+};
 
 export interface Observation {
   entityId: string;
