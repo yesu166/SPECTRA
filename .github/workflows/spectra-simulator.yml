@@ -48,3 +48,7 @@ jobs:
         run: npm test
       - name: Production build
         run: npm run build
+      - name: Install Chromium for browser smoke test
+        run: npx playwright install --with-deps chromium
+      - name: Smoke test the built app in a browser
+        run: npm run test:smoke
