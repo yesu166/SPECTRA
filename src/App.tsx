@@ -384,22 +384,29 @@ export default function App() {
       </header>
       <main className="workspace">
         <aside className="control-rail">
-          <div className="rail-heading"><Settings2 size={15}/><span>EXERCISE CONTROL</span></div>
-          <label className="field-label">SCENARIO TEMPLATE</label>
-          <div className="select-wrap"><select value={config.scenarioId} onChange={(event) => chooseScenario(event.target.value)}>{SCENARIOS.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select><ChevronDown size={14}/></div>
-          <p className="control-help">{scenario.description}</p>
-          <label className="field-label">ENVIRONMENT</label>
-          <div className="segmented">{([["urban","Urban",Grid2X2],["rural","Rural",Wind],["perimeter","Site",Map]] as const).map(([value,label,Icon]) => <button key={value} className={config.environment===value?"active":""} onClick={() => updateConfig({environment:value})}><Icon size={13}/>{label}</button>)}</div>
-          <label className="field-label">LIGHTING</label>
-          <div className="segmented">{([["day","Day",Sun],["dusk","Dusk",SunMoon],["night","Night",Moon]] as const).map(([value,label,Icon]) => <button key={value} className={config.lighting===value?"active":""} onClick={() => updateConfig({lighting:value})}><Icon size={13}/>{label}</button>)}</div>
-          <label className="field-label">VISIBILITY CONDITIONS</label>
-          <div className="segmented">{(["clear","haze","fog"] as const).map((value) => <button key={value} className={config.visibility===value?"active":""} onClick={() => updateConfig({visibility:value})}>{value==="clear"?"Clear":value==="haze"?"Haze":"Fog"}</button>)}</div>
-          <div className="range-label"><label className="field-label">SENSOR QUALITY</label><strong>{config.sensorQuality}%</strong></div><input aria-label="Sensor quality" className="range-input" type="range" min="25" max="100" step="5" value={config.sensorQuality} onChange={(event) => updateConfig({sensorQuality:Number(event.target.value)})}/><div className="range-ends"><span>DEGRADED</span><span>NOMINAL</span></div>
-          <div className="range-label"><label className="field-label">DIFFICULTY</label><strong>LEVEL {config.difficulty}</strong></div><input aria-label="Difficulty" className="range-input" type="range" min="1" max="5" value={config.difficulty} onChange={(event) => updateConfig({difficulty:Number(event.target.value)})}/><div className="range-ends"><span>INTRO</span><span>CHALLENGE</span></div>
-          <div className="range-label"><label className="field-label">CONTACT COUNT</label><strong>{config.contactCount}</strong></div><input aria-label="Contact count" className="range-input" type="range" min="1" max="18" value={config.contactCount} onChange={(event) => updateConfig({contactCount:Number(event.target.value)})}/><div className="range-ends"><span>SINGLE</span><span>MULTI-CONTACT</span></div>
-          <label className="field-label">SCENARIO SEED</label><div className="seed-control"><input type="number" min="1" max="99999999" value={config.seed} onChange={(event) => updateConfig({seed:Number(event.target.value)||1})}/><button title="Generate a new procedural variant" onClick={generateVariant}><RotateCcw size={14}/></button></div>
-          <button className="secondary-button full-width" onClick={() => resetScenario(config)}><RotateCcw size={14}/> Apply settings & reset</button>
-          <div className="rail-bottom"><div className="offline-lock"><Shield size={15}/><div><strong>Offline-capable</strong><span>All entities and sensor reports are synthetic.</span></div></div><button className="text-button" onClick={() => setNotice("SPECTRA PROTOTYPE · SCORING TREE IS A FUTURE PHASE")}><CircleHelp size={13}/> About this build</button></div>
+          <div className="rail-heading"><Target size={15}/><span>TRAINING WORKSPACE</span></div>
+          <div className="quick-scenario">
+            <label className="field-label" htmlFor="scenario-template">EXERCISE</label>
+            <div className="select-wrap"><select id="scenario-template" value={config.scenarioId} onChange={(event) => chooseScenario(event.target.value)}>{SCENARIOS.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select><ChevronDown size={14}/></div>
+            <p className="control-help">{scenario.description}</p>
+          </div>
+          <button className="advanced-settings-toggle" aria-expanded={advancedOpen} onClick={() => setAdvancedOpen((open) => !open)}>
+            <span><Settings2 size={14}/> Advanced settings</span><span>{advancedOpen ? "Hide" : "Configure"} <ChevronDown size={13} className={advancedOpen ? "rotate-chevron" : ""}/></span>
+          </button>
+          {advancedOpen && <div className="advanced-settings-panel">
+            <label className="field-label">ENVIRONMENT</label>
+            <div className="segmented">{([["urban","Urban",Grid2X2],["rural","Rural",Wind],["perimeter","Site",Map]] as const).map(([value,label,Icon]) => <button key={value} className={config.environment===value?"active":""} onClick={() => updateConfig({environment:value})}><Icon size={13}/>{label}</button>)}</div>
+            <label className="field-label">LIGHTING</label>
+            <div className="segmented">{([["day","Day",Sun],["dusk","Dusk",SunMoon],["night","Night",Moon]] as const).map(([value,label,Icon]) => <button key={value} className={config.lighting===value?"active":""} onClick={() => updateConfig({lighting:value})}><Icon size={13}/>{label}</button>)}</div>
+            <label className="field-label">VISIBILITY</label>
+            <div className="segmented">{(["clear","haze","fog"] as const).map((value) => <button key={value} className={config.visibility===value?"active":""} onClick={() => updateConfig({visibility:value})}>{value==="clear"?"Clear":value==="haze"?"Haze":"Fog"}</button>)}</div>
+            <div className="range-label"><label className="field-label">SENSOR QUALITY</label><strong>{config.sensorQuality}%</strong></div><input aria-label="Sensor quality" className="range-input" type="range" min="25" max="100" step="5" value={config.sensorQuality} onChange={(event) => updateConfig({sensorQuality:Number(event.target.value)})}/>
+            <div className="range-label"><label className="field-label">DIFFICULTY</label><strong>LEVEL {config.difficulty}</strong></div><input aria-label="Difficulty" className="range-input" type="range" min="1" max="5" value={config.difficulty} onChange={(event) => updateConfig({difficulty:Number(event.target.value)})}/>
+            <div className="range-label"><label className="field-label">CONTACT COUNT</label><strong>{config.contactCount}</strong></div><input aria-label="Contact count" className="range-input" type="range" min="1" max="18" value={config.contactCount} onChange={(event) => updateConfig({contactCount:Number(event.target.value)})}/>
+            <label className="field-label">SCENARIO SEED</label><div className="seed-control"><input type="number" min="1" max="99999999" value={config.seed} onChange={(event) => updateConfig({seed:Number(event.target.value)||1})}/><button title="Generate a new procedural variant" onClick={generateVariant}><RotateCcw size={14}/></button></div>
+            <button className="secondary-button full-width" onClick={() => resetScenario(config)}><RotateCcw size={14}/> Apply settings & reset</button>
+          </div>}
+          <div className="rail-bottom"><div className="offline-lock"><Shield size={15}/><div><strong>Local training</strong><span>Synthetic contacts · no live sensor connection.</span></div></div><button className="text-button" onClick={() => setNotice("SPECTRA PROTOTYPE · DECISIONS ARE RECORDED, FORMAL SCORING IS NOT YET VALIDATED")}><CircleHelp size={13}/> About this build</button></div>
         </aside>
         <section className="main-column">
           <div className="page-intro"><div><div className="eyebrow">COMMAND & TRAINING / WORKSPACE 01</div><h1>Common operating picture</h1><p>Observation-derived awareness across 2D and 3D views.</p></div><div className="intro-actions"><span className="seed-chip">SEED <b>{config.seed}</b></span><span className="status-chip"><span className="status-dot"/> {running?"EXERCISE RUNNING":"EXERCISE PAUSED"}</span></div></div>
@@ -445,6 +452,10 @@ export default function App() {
           <section className="panel equipment-panel"><div className="panel-heading"><div><div className="eyebrow">VIRTUAL EQUIPMENT</div><h2>Simulated sensor</h2></div><span className="equipment-chip"><span className="live-dot"/> READY</span></div><div className="device-illustration"><div className="device-screen"><span>SIM / SENSOR-01</span><div className="device-wave"><i/><i/><i/><i/><i/><i/><i/><i/><i/><i/></div><strong>{sensorHealth}%</strong><small>SYNTHETIC STATUS</small></div><div className="device-body"><span/><span/><span/><i/><i/><i/></div></div><div className="device-state"><span>DEVICE STATE</span><strong>SIMULATED · NO HARDWARE</strong></div><div className="device-state"><span>OBSERVATION QUALITY</span><strong>{config.sensorQuality}% configured</strong></div><p className="device-disclaimer">Illustrative training control only. No actual sensing or countermeasure function.</p></section>
           <section className="panel environment-panel"><div className="panel-heading"><div><div className="eyebrow">ENVIRONMENT STATE</div><h2>Current conditions</h2></div><Sun size={16} className="muted-icon"/></div><div className="env-state-grid"><div><span>SETTING</span><strong>{config.environment.toUpperCase()}</strong></div><div><span>LIGHTING</span><strong>{config.lighting.toUpperCase()}</strong></div><div><span>VISIBILITY</span><strong>{config.visibility.toUpperCase()}</strong></div><div><span>DIFFICULTY</span><strong>LEVEL {config.difficulty}</strong></div></div><div className="environment-note"><Wind size={14}/><span>{config.visibility==="fog"?"Fog enabled: synthetic observation dropout increases.":config.visibility==="haze"?"Haze enabled: observation confidence is reduced.":"Clear conditions: baseline synthetic visibility."}</span></div></section>
           <AfterActionReview events={events} sessions={sessions} onLoadSession={loadSession}/>
+          <div className="developer-diagnostics">
+            <button className="diagnostics-toggle" aria-expanded={showPerformance} onClick={() => setShowPerformance((visible) => !visible)}><Gauge size={13}/> Performance diagnostics <span>{showPerformance ? "Hide" : "Show"}</span></button>
+            {showPerformance && <div className="diagnostics-readout"><div><span>Rendered FPS</span><strong>{running ? perf.fps || "Measuring…" : "Paused"}</strong></div><div><span>Simulation updates / sec</span><strong>{running ? perf.simHz || "Measuring…" : "Paused"}</strong></div><div><span>Average frame delta</span><strong>{running ? `${perf.frameMs} ms` : "Paused"}</strong></div><p>Measured locally while the exercise is running. Target simulation step: 30 Hz. Actual rendering rate depends on this device.</p></div>}
+          </div>
           <div className="prototype-note"><Shield size={13}/><span><strong>Prototype boundary</strong> Synthetic entities and observations only. No live sensor data, operational engagement logic or countermeasure control.</span></div>
         </aside>
       </main>
