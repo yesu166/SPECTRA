@@ -10,6 +10,18 @@ export type Lighting = "day" | "dusk" | "night";
 export type Visibility = "clear" | "haze" | "fog";
 export type EntityKind = "authorized" | "unknown" | "simulated-threat";
 export type SensorStatus = "TRACK" | "INTERMITTENT" | "UNOBSERVED";
+export type InputMethod = "mouse" | "touch" | "gaze";
+export type ConfidenceLevel = "LOW" | "MEDIUM" | "HIGH";
+export type ContactClassification = "POSSIBLE_DRONE" | "NON_DRONE" | "UNKNOWN";
+export type TraineeAction =
+  | "OBSERVE"
+  | "REQUEST_MORE_INFO"
+  | "REPORT"
+  | "ESCALATE"
+  | "AUTHORIZE_RESPONSE"
+  | "DEFER"
+  | "CLASSIFY"
+  | "SET_CONFIDENCE";
 
 export interface Config {
   scenarioId: string;
@@ -55,6 +67,11 @@ export interface SessionEvent {
   detail: string;
   tick?: number;
   evidenceEventIds?: string[];
+  action?: TraineeAction;
+  inputMethod?: InputMethod;
+  confidence?: ConfidenceLevel;
+  classification?: ContactClassification;
+  contactId?: string;
 }
 
 export const SCENARIOS = [
