@@ -7,27 +7,24 @@ const port = 5173;
 const baseUrl = `http://${host}:${port}`;
 const npm = process.platform === "win32" ? "npm.cmd" : "npm";
 const server = spawn(npm, ["run", "dev", "--", "--host", host, "--strictPort", "--port", String(port)], {
-  stdio: ["ignore", "pipe", "pipe"],
+  stdio: "ignore",
   shell: process.platform === "win32",
   env: { ...process.env, CI: "1" },
 });
 
-let serverOutput = "";
-server.stdout.on("data", (chunk) => { serverOutput += chunk.toString(); });
-server.stderr.on("data", (chunk) => { serverOutput += chunk.toString(); });
 
 let browser;
 try {
   let ready = false;
   for (let attempt = 0; attempt < 100; attempt += 1) {
-    if (server.exitCode !== null) throw new Error(`Vite dev server exited early.\\n${serverOutput}`);
+    if (server.exitCode !== null) throw new Error("Vite dev server exited early before opening port 5173.");
     try {
       const response = await fetch(baseUrl);
       if (response.ok) { ready = true; break; }
     } catch { /* server is not ready yet */ }
     await delay(200);
   }
-  if (!ready) throw new Error(`Timed out waiting for Vite dev server.\\n${serverOutput}`);
+  if (!ready) throw new Error("Timed out waiting for the Vite dev server at http://127.0.0.1:5173.");
 
   browser = await chromium.launch({ headless: true });
   const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
