@@ -121,7 +121,7 @@ export default function App() {
       `confidence ${confidence.toLowerCase()}`,
       `input ${methodLabel}`,
       action === "REQUEST_MORE_INFO"
-        ? (tickRef.current > 0 ? "secondary synthetic sensor sampled" : "start the exercise before requesting a sample")
+        ? (tickRef.current > 0 ? "secondary synthetic sample requested" : "start the exercise before requesting a sample")
         : "",
     ].filter(Boolean).join(" · ");
     record("ACTION", titles[action], details, elapsedRef.current, {
