@@ -1,27 +1,25 @@
 import { useEffect, useRef } from "react";
 import * as THREE from "three";
-import type { Config, Entity, Observation } from "../simulation";
+import type { Config, ContactView } from "../simulation";
 
-interface Props { entities: Entity[]; config: Config; observations: Record<string, Observation>; selectedId: string | null; onSelect: (id: string) => void }
+interface Props { contacts: ContactView[]; config: Config; selectedId: string | null; onSelect: (id: string) => void }
 
-function visualStatusColor(status?: Observation["status"]) {
+function visualStatusColor(status?: ContactView["status"]) {
   if (status === "TRACK") return 0x51c9a5;
   if (status === "INTERMITTENT") return 0xf4bd58;
   if (status === "UNOBSERVED") return 0x82909c;
   return 0x8a9ba5;
 }
 
-export default function DigitalTwin({ entities, config, observations, selectedId, onSelect }: Props) {
+export default function DigitalTwin({ contacts, config, selectedId, onSelect }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
   const callbackRef = useRef(onSelect);
-  const entityRef = useRef(entities);
-  const observationRef = useRef(observations);
+  const contactRef = useRef(contacts);
   const selectionRef = useRef(selectedId);
   callbackRef.current = onSelect;
-  entityRef.current = entities;
-  observationRef.current = observations;
+  contactRef.current = contacts;
   selectionRef.current = selectedId;
-  const entityKey = entities.map((entity) => entity.id).join("|");
+  const contactKey = contacts.map((contact) => contact.id).join("|");
 
   useEffect(() => {
     const host = hostRef.current;
@@ -90,10 +88,10 @@ export default function DigitalTwin({ entities, config, observations, selectedId
     const hubTop = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 1.2, .12, 16), new THREE.MeshStandardMaterial({ color: 0x79bca8, roughness: .8 }));
     hubTop.position.set(-37, .42, 28); scene.add(hubTop);
 
-    const entityMeshes = new Map<string, THREE.Group>();
-    const entityMaterials = new Map<string, THREE.MeshStandardMaterial>();
+    const contactMeshes = new Map<string, THREE.Group>();
+    const contactMaterials = new Map<string, THREE.MeshStandardMaterial>();
     const pickables: THREE.Object3D[] = [];
-    entityRef.current.forEach((entity) => {
+    contactRef.current.forEach((contact) => {
       const group = new THREE.Group();
       const material = new THREE.MeshStandardMaterial({ color: 0xaebbc1, emissive: 0x41535b, emissiveIntensity: .18, roughness: .65 });
       const body = new THREE.Mesh(new THREE.BoxGeometry(1.2, .35, .8), material); group.add(body);
@@ -102,10 +100,11 @@ export default function DigitalTwin({ entities, config, observations, selectedId
         const rotor = new THREE.Mesh(new THREE.TorusGeometry(.27, .035, 5, 12), material); rotor.rotation.x = Math.PI / 2; rotor.position.set(x, .05, z); group.add(rotor);
       }
       const halo = new THREE.Mesh(new THREE.RingGeometry(1.25, 1.36, 32), new THREE.MeshBasicMaterial({ color: 0x9fb1ba, transparent: true, opacity: .45, side: THREE.DoubleSide }));
-      halo.rotation.x = -Math.PI / 2; halo.position.y = -entity.altitude / 130; group.add(halo);
-      group.userData.entityId = entity.id;
-      group.position.set((entity.x - .5) * 100, entity.altitude / 15, (entity.y - .5) * 80);
-      scene.add(group); entityMeshes.set(entity.id, group); entityMaterials.set(entity.id, material); pickables.push(body);
+      halo.rotation.x = -Math.PI / 2; group.add(halo);
+      group.userData.entityId = contact.id;
+      group.visible = typeof contact.x === "number" && typeof contact.y === "number";
+      group.position.set(((contact.x ?? 0.5) - .5) * 100, (contact.altitude ?? 80) / 15, ((contact.y ?? 0.5) - .5) * 80);
+      scene.add(group); contactMeshes.set(contact.id, group); contactMaterials.set(contact.id, material); pickables.push(body);
     });
     const raycaster = new THREE.Raycaster(), pointer = new THREE.Vector2();
     const onPointer = (event: PointerEvent) => {
@@ -121,26 +120,29 @@ export default function DigitalTwin({ entities, config, observations, selectedId
     const resize = () => { const width = Math.max(host.clientWidth, 1), height = Math.max(host.clientHeight, 1); camera.aspect = width / height; camera.updateProjectionMatrix(); renderer.setSize(width, height, false); };
     resize();
     const observer = new ResizeObserver(resize); observer.observe(host);
-    let raf = 0, frame = 0;
+    let raf = 0;
     const animate = () => {
       if (disposed) return;
-      raf = requestAnimationFrame(animate); frame += 1;
-      entityMeshes.forEach((group, id) => {
-        group.rotation.y += .002;
-        const entity = entityRef.current.find((item) => item.id === id);
-        const obs = observationRef.current[id];
-        if (entity) group.position.set((entity.x - .5) * 100, entity.altitude / 15 + Math.sin(frame * .015 + entity.phase) * .35, (entity.y - .5) * 80);
+      raf = requestAnimationFrame(animate);
+      contactMeshes.forEach((group, id) => {
+        const contact = contactRef.current.find((item) => item.id === id);
+        const status = contact?.status;
+        const hasPosition = typeof contact?.x === "number" && typeof contact?.y === "number";
+        group.visible = hasPosition;
+        if (hasPosition && contact) {
+          group.position.set((contact.x! - .5) * 100, (contact.altitude ?? 80) / 15, (contact.y! - .5) * 80);
+        }
         const selected = id === selectionRef.current;
-        const material = entityMaterials.get(id);
+        const material = contactMaterials.get(id);
         if (material) {
-          const color = visualStatusColor(obs?.status);
+          const color = visualStatusColor(status);
           material.color.setHex(color);
           material.emissive.setHex(color);
-          material.emissiveIntensity = selected ? .65 : obs?.status === "UNOBSERVED" ? .03 : .18;
+          material.emissiveIntensity = selected ? .65 : status === "UNOBSERVED" ? .03 : .18;
         }
         const halo = group.children[group.children.length - 1];
-        if (halo instanceof THREE.Mesh && halo.material instanceof THREE.MeshBasicMaterial) halo.material.color.setHex(visualStatusColor(obs?.status));
-        group.scale.setScalar(selected ? 1.15 : obs?.status === "UNOBSERVED" ? .82 : 1);
+        if (halo instanceof THREE.Mesh && halo.material instanceof THREE.MeshBasicMaterial) halo.material.color.setHex(visualStatusColor(status));
+        group.scale.setScalar(selected ? 1.15 : status === "UNOBSERVED" ? .82 : 1);
       });
       renderer.render(scene, camera);
     };
@@ -158,7 +160,7 @@ export default function DigitalTwin({ entities, config, observations, selectedId
       renderer.dispose();
       if (renderer.domElement.parentElement === host) host.removeChild(renderer.domElement);
     };
-  }, [config.environment, config.lighting, config.visibility, entityKey]);
+  }, [config.environment, config.lighting, config.visibility, contactKey]);
 
-  return <div className="twin-stage"><div className="twin-badge"><span className="live-dot" /> DIGITAL TWIN <span className="separator">/</span> SYNCHRONIZED</div><div className="twin-overlay top-right"><span>ENV</span><strong>{config.environment.toUpperCase()}</strong><span>LIGHT</span><strong>{config.lighting.toUpperCase()}</strong></div><div className="twin-overlay bottom-left"><span>SIMULATION VIEW</span><strong>{entities.length} SYNTHETIC ENTITIES</strong></div><div ref={hostRef} className="three-host" /></div>;
+  return <div className="twin-stage"><div className="twin-badge"><span className="live-dot" /> OBSERVATION-BASED VIEW <span className="separator">/</span> LAST KNOWN POSITIONS</div><div className="twin-overlay top-right"><span>ENV</span><strong>{config.environment.toUpperCase()}</strong><span>LIGHT</span><strong>{config.lighting.toUpperCase()}</strong></div><div className="twin-overlay bottom-left"><span>SENSOR VIEW</span><strong>{contacts.filter((contact) => typeof contact.x === "number" && typeof contact.y === "number").length} LOCATED CONTACTS</strong></div><div ref={hostRef} className="three-host" /></div>;
 }
