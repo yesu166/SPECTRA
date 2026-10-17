@@ -1,12 +1,13 @@
-import { Activity, Clock3, Database, Radio, ShieldAlert } from "lucide-react";
+import { Activity, Clock3, Database, Radio, ShieldAlert, Waves } from "lucide-react";
 import type { SessionEvent, SessionSnapshot } from "../simulation";
 
 interface Props { events: SessionEvent[]; sessions: SessionSnapshot[]; onLoadSession: (session: SessionSnapshot) => void }
 
 const iconFor = (type: SessionEvent["type"]) => {
   if (type === "DETECTION") return <Radio size={14} />;
+  if (type === "OBSERVATION") return <Waves size={14} />;
   if (type === "SENSOR") return <Activity size={14} />;
-  if (type === "OPERATOR") return <ShieldAlert size={14} />;
+  if (type === "OPERATOR" || type === "ACTION") return <ShieldAlert size={14} />;
   if (type === "ENVIRONMENT") return <Database size={14} />;
   return <Clock3 size={14} />;
 };
