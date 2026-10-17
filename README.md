@@ -75,7 +75,7 @@ Open SPECTRA on the phone, then use the controls above the 3D view:
 
 - **3D** — return to the normal desktop-style viewport.
 - **Phone VR** — enter full-screen motion-controlled viewing with touch overlays.
-- **Cardboard** — enter split-screen left/right-eye stereo. Put the phone into the viewer only after the view starts. Look at a 3D HUD button and hold your gaze for about 1.1 seconds to activate it. The **EXIT VIEW** button returns to normal mode.
+- **Cardboard** — enter split-screen left/right-eye stereo. Rotate the phone to **landscape** for the two side-by-side eye views, then put it into the viewer. Look at a 3D HUD button and hold your gaze for about 1.1 seconds to activate it. The **EXIT VIEW** button returns to normal mode.
 
 Phone orientation sensors generally require a secure context (HTTPS, except localhost). On iPhone, tap the mode button and grant motion permission when asked. If motion tracking does not start, check browser permission and confirm the site is HTTPS. The Cardboard mode is a basic phone-based stereo prototype, not full WebXR headset support; the exact visual result depends on the phone screen, viewer lens spacing and how the device fits in the viewer.
 
