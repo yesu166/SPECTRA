@@ -12,6 +12,8 @@ interface Props {
   selectedId: string | null;
   onSelect: (id: string) => void;
   elapsedSeconds: number;
+  isRunning: boolean;
+  onToggleSimulation: () => void;
   onTraineeAction: (
     action: TraineeAction,
     confidence: ConfidenceLevel,
@@ -26,6 +28,7 @@ interface HudButtonSpec {
   action?: TraineeAction;
   confidence?: ConfidenceLevel;
   classification?: ContactClassification;
+  simulationControl?: boolean;
   exit?: boolean;
 }
 
@@ -42,6 +45,7 @@ const HUD_BUTTONS: HudButtonSpec[] = [
   { label: "CONF LOW", action: "SET_CONFIDENCE", confidence: "LOW" },
   { label: "CONF MED", action: "SET_CONFIDENCE", confidence: "MEDIUM" },
   { label: "CONF HIGH", action: "SET_CONFIDENCE", confidence: "HIGH" },
+  { label: "RUN / PAUSE", simulationControl: true },
   { label: "EXIT VIEW", exit: true },
 ];
 
@@ -87,7 +91,7 @@ function buildStatusTexture() {
 }
 
 export default function DigitalTwin({
-  contacts, config, selectedId, onSelect, elapsedSeconds, onTraineeAction,
+  contacts, config, selectedId, onSelect, elapsedSeconds, isRunning, onToggleSimulation, onTraineeAction,
 }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
@@ -100,6 +104,8 @@ export default function DigitalTwin({
   const contactRef = useRef(contacts);
   const selectionRef = useRef(selectedId);
   const elapsedRef = useRef(elapsedSeconds);
+  const runningRef = useRef(isRunning);
+  const toggleSimulationRef = useRef(onToggleSimulation);
   const modeRef = useRef<ViewMode>("standard");
   const confidenceRef = useRef<ConfidenceLevel>("MEDIUM");
   const gazeTargetRef = useRef<THREE.Object3D | null>(null);
@@ -118,6 +124,8 @@ export default function DigitalTwin({
   contactRef.current = contacts;
   selectionRef.current = selectedId;
   elapsedRef.current = elapsedSeconds;
+  runningRef.current = isRunning;
+  toggleSimulationRef.current = onToggleSimulation;
   modeRef.current = viewMode;
   confidenceRef.current = confidence;
 
@@ -126,6 +134,10 @@ export default function DigitalTwin({
     inputMethod: InputMethod,
     contactId = selectionRef.current ?? undefined,
   ) => {
+    if (spec.simulationControl) {
+      toggleSimulationRef.current();
+      return;
+    }
     if (spec.exit) {
       modeRef.current = "standard";
       setViewMode("standard");
@@ -416,7 +428,7 @@ export default function DigitalTwin({
       ctx.font = "bold 28px monospace";
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      ctx.fillText(`SPECTRA / SYNTHETIC SENSOR · TRACK ${active} · GAP ${gaps} · T+${timeLabel(time)}`, statusDrawing.canvas.width / 2, statusDrawing.canvas.height / 2, statusDrawing.canvas.width - 22);
+      ctx.fillText(`SPECTRA / ${runningRef.current ? "RUNNING" : "PAUSED"} · TRACK ${active} · GAP ${gaps} · T+${timeLabel(time)}`, statusDrawing.canvas.width / 2, statusDrawing.canvas.height / 2, statusDrawing.canvas.width - 22);
       statusDrawing.texture.needsUpdate = true;
     };
     let lastStatusSecond = -1;
@@ -537,7 +549,10 @@ export default function DigitalTwin({
         <div className="phone-vr-hud">
           <div className="phone-hud-heading">
             <div><span>SPECTRA · PHONE MOTION</span><strong>T+{timeLabel(elapsedSeconds)}</strong></div>
-            <button onPointerUp={(event) => fire({ label: "EXIT", exit: true }, event)}>EXIT</button>
+            <div className="phone-hud-run-controls">
+              <button onPointerUp={() => toggleSimulationRef.current()}>{isRunning ? "PAUSE" : elapsedSeconds > 0 ? "RESUME" : "START"}</button>
+              <button onPointerUp={(event) => fire({ label: "EXIT", exit: true }, event)}>EXIT</button>
+            </div>
           </div>
           <div className="phone-hud-sensors">
             <span><i className="hud-status-track" /> TRACK {contacts.filter((contact) => contact.status === "TRACK").length}</span>
