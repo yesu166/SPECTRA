@@ -162,7 +162,7 @@ export default function App() {
     frameRef.current = null;
     setRunning(false);
     tickRef.current = 0; elapsedRef.current = 0; eventCounter.current = 3;
-    accumulatorRef.current = 0; publishAccumulatorRef.current = 0; lastFrameTimeRef.current = null;
+    accumulatorRef.current = 0; lastFrameTimeRef.current = null;
     setTick(0); setElapsed(0); setOperatorConfidence("MEDIUM");
     const engine = new SimulationSession(cfg);
     engineRef.current = engine;
@@ -223,9 +223,7 @@ export default function App() {
     let alive = true;
     let frames = 0;
     let simulationSteps = 0;
-    let measurementElapsed = 0;
     let measurementFrameElapsed = 0;
-    let measurementStepElapsed = 0;
     let lastPublishedAt = 0;
     const MAX_FRAME_DELTA = 0.1;
     const MAX_CATCH_UP_STEPS = 3;
@@ -257,7 +255,6 @@ export default function App() {
         }
       }
       frames += 1;
-      measurementElapsed += rawDelta;
       measurementFrameElapsed += rawDelta;
   
       if (now - lastPublishedAt >= 500) {
