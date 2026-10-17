@@ -55,8 +55,7 @@ export default function TacticalMap({ contacts, selectedId, onSelect, lighting }
       </svg>
       <div className="map-compass"><span>N</span><span className="compass-arrow">↑</span></div>
       <div className="map-scale">SIMULATED COORDINATE GRID <span>GRID 1000 × 700</span></div>
-      <div className="map-disclaimer">SYNTHETIC OBSERVATIONS · MAP POSITIONS ARE MEASURED OR LAST KNOWN</div>
-      {pendingCount > 0 && <div className="map-disclaimer">{pendingCount} CONTACT{pendingCount === 1 ? "" : "S"} NOT YET LOCATED BY A SENSOR</div>}
+      <div className="map-disclaimer">SYNTHETIC OBSERVATIONS · MEASURED OR LAST KNOWN POSITIONS{pendingCount > 0 ? ` · ${pendingCount} NOT YET LOCATED` : ""}</div>
     </div>
   );
 }
