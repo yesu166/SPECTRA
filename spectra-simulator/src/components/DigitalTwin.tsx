@@ -94,13 +94,12 @@ export default function DigitalTwin({ contacts, config, selectedId, onSelect }: 
     contactRef.current.forEach((contact) => {
       const group = new THREE.Group();
       const material = new THREE.MeshStandardMaterial({ color: 0xaebbc1, emissive: 0x41535b, emissiveIntensity: .18, roughness: .65 });
-      const body = new THREE.Mesh(new THREE.BoxGeometry(1.2, .35, .8), material); group.add(body);
-      for (const [x, z] of [[-.9, -.7], [-.9, .7], [.9, -.7], [.9, .7]]) {
-        const arm = new THREE.Mesh(new THREE.BoxGeometry(.8, .09, .09), material); arm.position.set(x * .42, 0, z * .35); group.add(arm);
-        const rotor = new THREE.Mesh(new THREE.TorusGeometry(.27, .035, 5, 12), material); rotor.rotation.x = Math.PI / 2; rotor.position.set(x, .05, z); group.add(rotor);
-      }
+      // Neutral marker geometry avoids visually declaring an uncertain contact to be a drone.
+      const body = new THREE.Mesh(new THREE.OctahedronGeometry(.62, 0), material); group.add(body);
+      const stem = new THREE.Mesh(new THREE.CylinderGeometry(.035, .035, 1.1, 5), material);
+      stem.position.y = -.72; group.add(stem);
       const halo = new THREE.Mesh(new THREE.RingGeometry(1.25, 1.36, 32), new THREE.MeshBasicMaterial({ color: 0x9fb1ba, transparent: true, opacity: .45, side: THREE.DoubleSide }));
-      halo.rotation.x = -Math.PI / 2; group.add(halo);
+      halo.rotation.x = -Math.PI / 2; halo.position.y = -.75; group.add(halo);
       group.userData.entityId = contact.id;
       group.visible = typeof contact.x === "number" && typeof contact.y === "number";
       group.position.set(((contact.x ?? 0.5) - .5) * 100, (contact.altitude ?? 80) / 15, ((contact.y ?? 0.5) - .5) * 80);
