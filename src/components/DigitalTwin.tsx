@@ -228,6 +228,12 @@ export default function DigitalTwin({
     scene.background = new THREE.Color(night ? "#07111b" : dusk ? "#2a2331" : "#b8c9ca");
     scene.fog = new THREE.Fog(scene.background, config.visibility === "fog" ? 16 : config.visibility === "haze" ? 26 : 45, 130);
     const camera = new THREE.PerspectiveCamera(48, 1, .1, 300);
+    const gazeReticleMaterial = new THREE.MeshBasicMaterial({ color: 0x9be9ce, transparent: true, opacity: .9, side: THREE.DoubleSide, depthTest: false });
+    const gazeReticle = new THREE.Mesh(new THREE.RingGeometry(.025, .043, 20), gazeReticleMaterial);
+    gazeReticle.position.set(0, 0, -1.2);
+    gazeReticle.renderOrder = 20;
+    gazeReticle.visible = false;
+    camera.add(gazeReticle);
     const standardPosition = new THREE.Vector3(0, 36, 58);
     const phonePosition = new THREE.Vector3(0, 7, 32);
     camera.position.copy(standardPosition);
@@ -324,7 +330,7 @@ export default function DigitalTwin({
       const texture = buildButtonTexture(spec.label);
       const material = new THREE.MeshBasicMaterial({ map: texture, transparent: true, side: THREE.DoubleSide, depthWrite: false });
       const mesh = new THREE.Mesh(new THREE.PlaneGeometry(1.12, .28), material);
-      mesh.position.set((column - 1) * 1.24, .58 - row * .36, 0);
+      mesh.position.set((column - 1) * 1.24, -.35 - row * .33, 0);
       mesh.userData.hudAction = spec.label;
       hudRoot.add(mesh);
       hudButtons.push(mesh);
@@ -334,7 +340,7 @@ export default function DigitalTwin({
     statusDrawing.texture.colorSpace = THREE.SRGBColorSpace;
     const statusMaterial = new THREE.MeshBasicMaterial({ map: statusDrawing.texture, transparent: true, side: THREE.DoubleSide, depthWrite: false });
     const statusMesh = new THREE.Mesh(new THREE.PlaneGeometry(3.85, .37), statusMaterial);
-    statusMesh.position.set(0, 1.05, 0);
+    statusMesh.position.set(0, .2, 0);
     hudRoot.add(statusMesh);
 
     const eyeCamera = new THREE.StereoCamera();
@@ -381,12 +387,14 @@ export default function DigitalTwin({
       gazeFiredRef.current = false;
       if (mode === "standard") {
         hudRoot.visible = false;
+        gazeReticle.visible = false;
         camera.position.copy(standardPosition);
         camera.lookAt(0, 0, 0);
       } else {
         camera.position.copy(phonePosition);
         camera.lookAt(0, 7, 0);
         hudRoot.visible = mode === "cardboard";
+        gazeReticle.visible = mode === "cardboard";
         if (mode === "cardboard") recenterHudRef.current?.();
       }
       resize();
@@ -447,6 +455,9 @@ export default function DigitalTwin({
           const material = button.material as THREE.MeshBasicMaterial;
           material.color.set(button === hit ? 0x9bffe0 : 0xffffff);
         });
+        gazeReticleMaterial.color.set(hit ? 0xffd483 : 0x9be9ce);
+        const dwell = hit && gazeStartRef.current ? Math.min(1, (performance.now() - gazeStartRef.current) / 1100) : 0;
+        gazeReticle.scale.setScalar(1 + dwell * .8);
         if (hit && !gazeFiredRef.current && performance.now() - gazeStartRef.current >= 1100) {
           gazeFiredRef.current = true;
           const spec = buttonSpecs.get(hit);
