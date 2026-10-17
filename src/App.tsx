@@ -230,6 +230,9 @@ export default function App() {
 
     let alive = true;
     const measurement = performanceRef.current;
+    let renderedFrames = 0;
+    let simulatedSteps = 0;
+    let accumulatedFrameMs = 0;
     measurement.frames = 0;
     measurement.steps = 0;
     measurement.frameMsSum = 0;
@@ -256,16 +259,18 @@ export default function App() {
           simulationStep();
           accumulatorRef.current -= fixedStepSeconds;
           steps += 1;
-          simulationSteps += 1;
+          simulatedSteps += 1;
         }
         if (steps === MAX_CATCH_UP_STEPS && accumulatorRef.current >= fixedStepSeconds) {
           // Drop excessive backlog to avoid the spiral of death on slow machines.
           accumulatorRef.current = Math.min(accumulatorRef.current, fixedStepSeconds * 0.5);
         }
       }
-      measurement.frames += 1;
-      measurement.steps += stepsThisFrame;
-      measurement.frameMsSum += Math.max(0, now - (previous ?? now));
+      renderedFrames += 1;
+      measurement.frames = renderedFrames;
+      measurement.steps = simulatedSteps;
+      accumulatedFrameMs += Math.max(0, now - (previous ?? now));
+      measurement.frameMsSum = accumulatedFrameMs;
       if (measurement.windowStart === 0) measurement.windowStart = now;
       if (now - measurement.windowStart >= 500) {
         const span = Math.max(0.001, (now - measurement.windowStart) / 1000);
@@ -276,6 +281,9 @@ export default function App() {
             frameMs: Number((measurement.frameMsSum / Math.max(1, measurement.frames)).toFixed(1)),
           });
         }
+        renderedFrames = 0;
+        simulatedSteps = 0;
+        accumulatedFrameMs = 0;
         measurement.frames = 0;
         measurement.steps = 0;
         measurement.frameMsSum = 0;
