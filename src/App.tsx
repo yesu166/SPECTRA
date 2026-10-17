@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Activity, AlertTriangle, ArrowDownToLine, Check, ChevronDown, CircleHelp,
-  Clock3, Crosshair, Eye, Gauge, Grid2X2, Layers3, Map, Moon, Pause,
+  Activity, Clock3, Crosshair, Eye, Gauge, Grid2X2, Layers3, Map, Moon, Pause,
   Play, Radio, RotateCcw, Save, Settings2, Shield, Sun, SunMoon, Target,
   Waves, Wind,
 } from "lucide-react";
@@ -47,7 +47,16 @@ export default function App() {
   const [sessions, setSessions] = useState<SessionSnapshot[]>(() => loadSessions());
   const [sessionStarted, setSessionStarted] = useState(new Date().toISOString());
   const [notice, setNotice] = useState("SIMULATION READY · SELECT A SCENARIO");
-  const intervalRef = useRef<number | null>(null);
+  const frameRef = useRef<number | null>(null);
+  const lastFrameTimeRef = useRef<number | null>(null);
+  const accumulatorRef = useRef(0);
+  const publishAccumulatorRef = useRef(0);
+  const performanceAccumulatorRef = useRef(0);
+  const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [showPerformance, setShowPerformance] = useState(false);
+  const [perf, setPerf] = useState({ fps: 0, simHz: 0, frameMs: 0 });
+  const simulationHz = 30;
+  const fixedStepSeconds = 1 / simulationHz;
   const eventsRef = useRef<SessionEvent[]>([]);
   const tickRef = useRef(0);
   const elapsedRef = useRef(0);
@@ -151,10 +160,11 @@ export default function App() {
   ], []);
 
   const resetScenario = useCallback((cfg: Config, announce = true) => {
-    if (intervalRef.current !== null) window.clearInterval(intervalRef.current);
+    if (frameRef.current !== null) cancelAnimationFrame(frameRef.current);
     intervalRef.current = null;
     setRunning(false);
     tickRef.current = 0; elapsedRef.current = 0; eventCounter.current = 3;
+    accumulatorRef.current = 0; publishAccumulatorRef.current = 0; lastFrameTimeRef.current = null;
     setTick(0); setElapsed(0); setOperatorConfidence("MEDIUM");
     const engine = new SimulationSession(cfg);
     engineRef.current = engine;
@@ -169,25 +179,119 @@ export default function App() {
 
   useEffect(() => () => { if (intervalRef.current !== null) window.clearInterval(intervalRef.current); }, []);
 
-  const step = useCallback(() => {
+  const simulationStep = useCallback(() => {
     const cfg = configRef.current;
-    tickRef.current += 1; elapsedRef.current += 1;
+    tickRef.current += 1;
+    elapsedRef.current += fixedStepSeconds;
     const currentTick = tickRef.current;
-    const nextContacts = engineRef.current?.step() ?? [];
-    setContacts(nextContacts); setTick(currentTick); setElapsed(elapsedRef.current);
-    if (currentTick % 4 === 1 && nextContacts.length) {
-      const candidate = nextContacts[Math.floor((currentTick * 7 + cfg.seed) % nextContacts.length)];
-      if (candidate.status === "TRACK") record("DETECTION", `Contact observed · ${candidate.id}`, `Synthetic sensor observation · confidence ${candidate.confidence ?? 0}% · identity not inferred from sensor alone`, elapsedRef.current);
-      else record("SENSOR", `Observation gap · ${candidate.id}`, "No observation was available for this simulated tick.", elapsedRef.current);
+    const nextContacts = engineRef.current?.step(fixedStepSeconds) ?? [];
+    if (currentTick % 2 === 0) {
+      setContacts(nextContacts);
+      setTick(currentTick);
+      setElapsed(elapsedRef.current);
     }
-    if (currentTick % 12 === 0) record("SENSOR", "Sensor status update", `${nextContacts.filter((item) => item.status === "TRACK").length} current tracks · ${nextContacts.filter((item) => item.status === "UNOBSERVED").length} unobserved`, elapsedRef.current);
+    if (currentTick % simulationHz === 1 && nextContacts.length) {
+      const candidate = nextContacts[Math.floor((currentTick * 7 + cfg.seed) % nextContacts.length)];
+      if (candidate.status === "TRACK") record(
+        "DETECTION", `Contact observed · ${candidate.id}`,
+        `Synthetic sensor observation · confidence ${candidate.confidence ?? 0}% · identity not inferred from sensor alone`,
+        elapsedRef.current, { contactId: candidate.id, tick: currentTick },
+      );
+      else record(
+        "SENSOR", `Observation gap · ${candidate.id}`,
+        "No observation was available for this simulated tick.",
+        elapsedRef.current, { contactId: candidate.id, tick: currentTick },
+      );
+    }
+    if (currentTick % (simulationHz * 5) === 0) record(
+      "SENSOR", "Sensor status update",
+      `${nextContacts.filter((item) => item.status === "TRACK").length} current tracks · ${nextContacts.filter((item) => item.status === "UNOBSERVED").length} unobserved`,
+      elapsedRef.current, { tick: currentTick },
+    );
   }, [record]);
 
   useEffect(() => {
-    if (running) intervalRef.current = window.setInterval(step, 1000);
-    else if (intervalRef.current !== null) { window.clearInterval(intervalRef.current); intervalRef.current = null; }
-    return () => { if (intervalRef.current !== null) window.clearInterval(intervalRef.current); intervalRef.current = null; };
-  }, [running, step]);
+    if (!running) {
+      if (frameRef.current !== null) cancelAnimationFrame(frameRef.current);
+      frameRef.current = null;
+      lastFrameTimeRef.current = null;
+      accumulatorRef.current = 0;
+      return;
+    }
+
+    let alive = true;
+    let frames = 0;
+    let simulationSteps = 0;
+    let measurementElapsed = 0;
+    let measurementFrameElapsed = 0;
+    let measurementStepElapsed = 0;
+    let lastPublishedAt = 0;
+    const MAX_FRAME_DELTA = 0.1;
+    const MAX_CATCH_UP_STEPS = 3;
+
+    const onVisibilityChange = () => {
+      lastFrameTimeRef.current = null;
+      accumulatorRef.current = 0;
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+
+    const frame = (now: number) => {
+      if (!alive) return;
+      const previous = lastFrameTimeRef.current;
+      lastFrameTimeRef.current = now;
+      const rawDelta = previous === null || document.hidden ? 0 : (now - previous) / 1000;
+      const delta = Math.max(0, Math.min(rawDelta, MAX_FRAME_DELTA));
+      if (!document.hidden) {
+        accumulatorRef.current += delta;
+        let steps = 0;
+        while (accumulatorRef.current >= fixedStepSeconds && steps < MAX_CATCH_UP_STEPS) {
+          simulationStep();
+          accumulatorRef.current -= fixedStepSeconds;
+          steps += 1;
+          simulationSteps += 1;
+        }
+        if (steps === MAX_CATCH_UP_STEPS && accumulatorRef.current >= fixedStepSeconds) {
+          // Drop excessive backlog to avoid the spiral of death on slow machines.
+          accumulatorRef.current = Math.min(accumulatorRef.current, fixedStepSeconds * 0.5);
+        }
+      }
+      frames += 1;
+      measurementElapsed += rawDelta;
+      measurementFrameElapsed += rawDelta;
+      measurementStepElapsed += simulationSteps;
+      publishAccumulatorRef.current += delta;
+      performanceAccumulatorRef.current += Math.max(0, now - (previous ?? now));
+
+      if (now - lastPublishedAt >= 500) {
+        const span = Math.max(0.001, (now - lastPublishedAt) / 1000);
+        if (showPerformance) {
+          setPerf({
+            fps: Math.round(frames / span),
+            simHz: Math.round(simulationSteps / span),
+            frameMs: Number((measurementFrameElapsed / Math.max(1, frames) * 1000).toFixed(1)),
+          });
+        }
+        frames = 0;
+        simulationSteps = 0;
+        measurementFrameElapsed = 0;
+        measurementStepElapsed = 0;
+        measurementElapsed = 0;
+        performanceAccumulatorRef.current = 0;
+        lastPublishedAt = now;
+      }
+      frameRef.current = requestAnimationFrame(frame);
+    };
+
+    frameRef.current = requestAnimationFrame(frame);
+    return () => {
+      alive = false;
+      if (frameRef.current !== null) cancelAnimationFrame(frameRef.current);
+      frameRef.current = null;
+      lastFrameTimeRef.current = null;
+      accumulatorRef.current = 0;
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
+  }, [running, simulationStep, showPerformance]);
 
   const updateConfig = (patch: Partial<Config>) => {
     const next = { ...config, ...patch };
@@ -242,7 +346,7 @@ export default function App() {
 
   const loadSession = (session: SessionSnapshot) => {
     if (intervalRef.current !== null) window.clearInterval(intervalRef.current);
-    intervalRef.current = null; setRunning(false);
+    frameRef.current = null; setRunning(false);
     setConfig(session.config); configRef.current = session.config;
     eventsRef.current = session.events; setEvents(session.events); eventCounter.current = session.events.length;
     setElapsed(session.duration); elapsedRef.current = session.duration;
