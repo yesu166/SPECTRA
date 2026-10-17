@@ -8,6 +8,13 @@ interface Props {
   lighting: string;
 }
 
+function observationColor(status?: Observation["status"]) {
+  if (status === "TRACK") return "#52c6a1";
+  if (status === "INTERMITTENT") return "#f5bf58";
+  if (status === "UNOBSERVED") return "#ff647c";
+  return "#7b8c98";
+}
+
 export default function TacticalMap({ entities, observations, selectedId, onSelect, lighting }: Props) {
   return (
     <div className={`map-shell map-${lighting}`}>
@@ -29,7 +36,7 @@ export default function TacticalMap({ entities, observations, selectedId, onSele
           const obs = observations[entity.id];
           const x = entity.x * 1000;
           const y = entity.y * 700;
-          const color = entity.kind === "authorized" ? "#52c6a1" : entity.kind === "unknown" ? "#f5bf58" : "#ff647c";
+          const color = observationColor(obs?.status);
           const selected = selectedId === entity.id;
           return (
             <g key={entity.id} onClick={() => onSelect(entity.id)} role="button" tabIndex={0}
