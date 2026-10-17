@@ -123,9 +123,9 @@ export class SimulationSession {
     });
   }
 
-  step(): ContactView[] {
+  step(deltaSeconds = 1): ContactView[] {
     this.#tick += 1;
-    this.#tracks = moveTruthTracks(this.#tracks, this.#tick);
+    this.#tracks = moveTruthTracks(this.#tracks, deltaSeconds);
     for (const track of this.#tracks) {
       const raw = observeTruth(this.config, track, this.#tick);
       this.#observations.set(track.id, copyObservation(raw, this.#observations.get(track.id)));
