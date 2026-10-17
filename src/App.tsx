@@ -39,6 +39,7 @@ export default function App() {
   if (engineRef.current === null) engineRef.current = new SimulationSession(DEFAULT_CONFIG);
   const [contacts, setContacts] = useState<ContactView[]>(() => engineRef.current!.getContacts());
   const [selectedId, setSelectedId] = useState<string | null>("C-01");
+  const [operatorConfidence, setOperatorConfidence] = useState<ConfidenceLevel>("MEDIUM");
   const [running, setRunning] = useState(false);
   const [tick, setTick] = useState(0);
   const [elapsed, setElapsed] = useState(0);
@@ -73,6 +74,7 @@ export default function App() {
       eventsRef.current = next;
       return next;
     });
+    return event;
   }, []);
 
   const handleTraineeAction = useCallback((
@@ -92,16 +94,39 @@ export default function App() {
       CLASSIFY: "Contact classified",
       SET_CONFIDENCE: "Confidence setting changed",
     };
+    if (action === "SET_CONFIDENCE") setOperatorConfidence(confidence);
+
+    const evidenceEventIds: string[] = [];
+    if (action === "REQUEST_MORE_INFO" && contactId && tickRef.current > 0) {
+      const refreshedContacts = engineRef.current?.requestMoreInfo(contactId) ?? [];
+      setContacts(refreshedContacts);
+      const refreshed = refreshedContacts.find((item) => item.id === contactId);
+      if (refreshed) {
+        const available = refreshed.source !== "SIMULATED CAMERA" || refreshed.status !== "UNOBSERVED";
+        const evidence = record(
+          "OBSERVATION",
+          available ? "Secondary synthetic observation received" : "Secondary observation unavailable",
+          `${contactId} · ${refreshed.source ?? "SIMULATED CAMERA"} · ${refreshed.note ?? "No additional detail"} · confidence ${refreshed.confidence ?? 0}%`,
+          elapsedRef.current,
+          { contactId, tick: tickRef.current },
+        );
+        evidenceEventIds.push(evidence.id);
+      }
+    }
+
     const methodLabel = inputMethod === "gaze" ? "gaze-and-hold" : inputMethod;
     const details = [
       contactId ? `Contact ${contactId}` : "No contact selected",
       classification ? `classification ${classification.replaceAll("_", " ").toLowerCase()}` : "",
       `confidence ${confidence.toLowerCase()}`,
       `input ${methodLabel}`,
-      action === "REQUEST_MORE_INFO" ? "additional sensors are not yet simulated" : "",
+      action === "REQUEST_MORE_INFO"
+        ? (tickRef.current > 0 ? "secondary synthetic sensor sampled" : "start the exercise before requesting a sample")
+        : "",
     ].filter(Boolean).join(" · ");
     record("ACTION", titles[action], details, elapsedRef.current, {
       action, confidence, inputMethod, classification, contactId, tick: tickRef.current,
+      ...(evidenceEventIds.length ? { evidenceEventIds } : {}),
     });
     setNotice(`ACTION RECORDED · ${titles[action].toUpperCase()}`);
   }, [record]);
