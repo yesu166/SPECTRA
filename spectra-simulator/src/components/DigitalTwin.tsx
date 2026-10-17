@@ -4,6 +4,13 @@ import type { Config, Entity, Observation } from "../simulation";
 
 interface Props { entities: Entity[]; config: Config; observations: Record<string, Observation>; selectedId: string | null; onSelect: (id: string) => void }
 
+function visualStatusColor(status?: Observation["status"]) {
+  if (status === "TRACK") return 0x51c9a5;
+  if (status === "INTERMITTENT") return 0xf4bd58;
+  if (status === "UNOBSERVED") return 0x82909c;
+  return 0x8a9ba5;
+}
+
 export default function DigitalTwin({ entities, config, observations, selectedId, onSelect }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
   const callbackRef = useRef(onSelect);
@@ -14,6 +21,7 @@ export default function DigitalTwin({ entities, config, observations, selectedId
   entityRef.current = entities;
   observationRef.current = observations;
   selectionRef.current = selectedId;
+  const entityKey = entities.map((entity) => entity.id).join("|");
 
   useEffect(() => {
     const host = hostRef.current;
@@ -35,7 +43,6 @@ export default function DigitalTwin({ entities, config, observations, selectedId
     scene.add(new THREE.HemisphereLight(night ? 0x7a9ac1 : 0xe6f5ff, 0x263a3e, night ? 1.25 : 2.1));
     const sun = new THREE.DirectionalLight(night ? 0x89a9ff : dusk ? 0xffbb89 : 0xfff0d7, night ? 1.1 : 2.3);
     sun.position.set(-22, 40, 18); scene.add(sun);
-
     const groundColor = config.environment === "urban" ? (night ? 0x18242b : 0x7d8988) : config.environment === "rural" ? (night ? 0x152a2a : 0x738c70) : (night ? 0x1a2c30 : 0x89978a);
     const ground = new THREE.Mesh(new THREE.PlaneGeometry(120, 100), new THREE.MeshStandardMaterial({ color: groundColor, roughness: 1 }));
     ground.rotation.x = -Math.PI / 2; ground.position.y = -.35; scene.add(ground);
@@ -45,7 +52,6 @@ export default function DigitalTwin({ entities, config, observations, selectedId
     road.rotation.x = -Math.PI / 2; road.position.set(0, -.22, 8); scene.add(road);
     const lane = new THREE.Mesh(new THREE.PlaneGeometry(120, .18), new THREE.MeshBasicMaterial({ color: night ? 0x52616c : 0xc2c6ad }));
     lane.rotation.x = -Math.PI / 2; lane.position.set(0, -.2, 8); scene.add(lane);
-
     const buildingMat = new THREE.MeshStandardMaterial({ color: night ? 0x354653 : 0xc0c2b7, roughness: .9 });
     const roofMat = new THREE.MeshStandardMaterial({ color: night ? 0x243640 : 0x8b9692, roughness: .9 });
     const treeMat = new THREE.MeshStandardMaterial({ color: night ? 0x1e433c : 0x3d7056, roughness: 1 });
@@ -89,14 +95,13 @@ export default function DigitalTwin({ entities, config, observations, selectedId
     const pickables: THREE.Object3D[] = [];
     entityRef.current.forEach((entity) => {
       const group = new THREE.Group();
-      const color = entity.kind === "authorized" ? 0x51c9a5 : entity.kind === "unknown" ? 0xf4bd58 : 0xff667f;
-      const material = new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: .25, roughness: .6 });
+      const material = new THREE.MeshStandardMaterial({ color: 0xaebbc1, emissive: 0x41535b, emissiveIntensity: .18, roughness: .65 });
       const body = new THREE.Mesh(new THREE.BoxGeometry(1.2, .35, .8), material); group.add(body);
       for (const [x, z] of [[-.9, -.7], [-.9, .7], [.9, -.7], [.9, .7]]) {
         const arm = new THREE.Mesh(new THREE.BoxGeometry(.8, .09, .09), material); arm.position.set(x * .42, 0, z * .35); group.add(arm);
         const rotor = new THREE.Mesh(new THREE.TorusGeometry(.27, .035, 5, 12), material); rotor.rotation.x = Math.PI / 2; rotor.position.set(x, .05, z); group.add(rotor);
       }
-      const halo = new THREE.Mesh(new THREE.RingGeometry(1.25, 1.36, 32), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: .55, side: THREE.DoubleSide }));
+      const halo = new THREE.Mesh(new THREE.RingGeometry(1.25, 1.36, 32), new THREE.MeshBasicMaterial({ color: 0x9fb1ba, transparent: true, opacity: .45, side: THREE.DoubleSide }));
       halo.rotation.x = -Math.PI / 2; halo.position.y = -entity.altitude / 130; group.add(halo);
       group.userData.entityId = entity.id;
       group.position.set((entity.x - .5) * 100, entity.altitude / 15, (entity.y - .5) * 80);
@@ -113,10 +118,7 @@ export default function DigitalTwin({ entities, config, observations, selectedId
       if (typeof id === "string") callbackRef.current(id);
     };
     renderer.domElement.addEventListener("pointerdown", onPointer);
-    const resize = () => {
-      const width = Math.max(host.clientWidth, 1), height = Math.max(host.clientHeight, 1);
-      camera.aspect = width / height; camera.updateProjectionMatrix(); renderer.setSize(width, height, false);
-    };
+    const resize = () => { const width = Math.max(host.clientWidth, 1), height = Math.max(host.clientHeight, 1); camera.aspect = width / height; camera.updateProjectionMatrix(); renderer.setSize(width, height, false); };
     resize();
     const observer = new ResizeObserver(resize); observer.observe(host);
     let raf = 0, frame = 0;
@@ -128,14 +130,21 @@ export default function DigitalTwin({ entities, config, observations, selectedId
         const entity = entityRef.current.find((item) => item.id === id);
         const obs = observationRef.current[id];
         if (entity) group.position.set((entity.x - .5) * 100, entity.altitude / 15 + Math.sin(frame * .015 + entity.phase) * .35, (entity.y - .5) * 80);
-        const selected = id === selectionRef.current, material = entityMaterials.get(id);
-        if (material) material.emissiveIntensity = selected ? .7 : obs?.status === "UNOBSERVED" ? .05 : .24;
+        const selected = id === selectionRef.current;
+        const material = entityMaterials.get(id);
+        if (material) {
+          const color = visualStatusColor(obs?.status);
+          material.color.setHex(color);
+          material.emissive.setHex(color);
+          material.emissiveIntensity = selected ? .65 : obs?.status === "UNOBSERVED" ? .03 : .18;
+        }
+        const halo = group.children[group.children.length - 1];
+        if (halo instanceof THREE.Mesh && halo.material instanceof THREE.MeshBasicMaterial) halo.material.color.setHex(visualStatusColor(obs?.status));
         group.scale.setScalar(selected ? 1.15 : obs?.status === "UNOBSERVED" ? .82 : 1);
       });
       renderer.render(scene, camera);
     };
     animate();
-
     return () => {
       disposed = true; cancelAnimationFrame(raf); observer.disconnect();
       renderer.domElement.removeEventListener("pointerdown", onPointer);
@@ -149,7 +158,7 @@ export default function DigitalTwin({ entities, config, observations, selectedId
       renderer.dispose();
       if (renderer.domElement.parentElement === host) host.removeChild(renderer.domElement);
     };
-  }, [config.environment, config.lighting, config.visibility]);
+  }, [config.environment, config.lighting, config.visibility, entityKey]);
 
   return <div className="twin-stage"><div className="twin-badge"><span className="live-dot" /> DIGITAL TWIN <span className="separator">/</span> SYNCHRONIZED</div><div className="twin-overlay top-right"><span>ENV</span><strong>{config.environment.toUpperCase()}</strong><span>LIGHT</span><strong>{config.lighting.toUpperCase()}</strong></div><div className="twin-overlay bottom-left"><span>SIMULATION VIEW</span><strong>{entities.length} SYNTHETIC ENTITIES</strong></div><div ref={hostRef} className="three-host" /></div>;
 }
