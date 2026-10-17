@@ -115,6 +115,7 @@ export default function DigitalTwin({
   const orientationBaselineRef = useRef<THREE.Quaternion | null>(null);
   const cameraBaselineRef = useRef<THREE.Quaternion | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>("standard");
+  const [rendererError, setRendererError] = useState<string | null>(null);
   const [motionEnabled, setMotionEnabled] = useState(false);
   const [motionMessage, setMotionMessage] = useState("Motion view is off");
   const [confidence, setConfidence] = useState<ConfidenceLevel>("MEDIUM");
@@ -256,7 +257,15 @@ export default function DigitalTwin({
     camera.position.copy(standardPosition);
     camera.lookAt(0, 0, 0);
     cameraRef.current = camera;
-    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: "low-power" });
+    let renderer: THREE.WebGLRenderer;
+    try {
+      renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: "low-power" });
+      setRendererError(null);
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      setRendererError(`3D graphics could not start: ${reason}. Try enabling hardware acceleration in the browser or updating the graphics driver. The 2D training workspace remains available.`);
+      return;
+    }
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.35));
     renderer.shadowMap.enabled = false;
     renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -612,6 +621,7 @@ export default function DigitalTwin({
           <p>{elapsedSeconds > 0 ? "The synthetic sensor has not provided a usable position yet." : "Start the exercise to generate observations and populate the environment with contact markers."}</p>
         </div>
       )}
+      {rendererError && <div className="twin-renderer-error" role="alert"><strong>3D view unavailable</strong><p>{rendererError}</p><span>Use the 2D contact map and inspector while you check the browser's graphics support.</span></div>}
       <div ref={hostRef} className="three-host" />
     </div>
   );
