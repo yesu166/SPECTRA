@@ -98,6 +98,7 @@ export default function DigitalTwin({
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
   const resizeRef = useRef<(() => void) | null>(null);
   const applyModeRef = useRef<((mode: ViewMode) => void) | null>(null);
+  const refreshContactsRef = useRef<(() => void) | null>(null);
   const recenterHudRef = useRef<(() => void) | null>(null);
   const callbackRef = useRef(onSelect);
   const actionRef = useRef(onTraineeAction);
@@ -224,6 +225,10 @@ export default function DigitalTwin({
   useEffect(() => {
     applyModeRef.current?.(viewMode);
   }, [viewMode]);
+
+  useEffect(() => {
+    refreshContactsRef.current?.();
+  }, [contacts]);
 
   useEffect(() => {
     if (viewMode === "cardboard") recenterHudRef.current?.();
@@ -437,12 +442,17 @@ export default function DigitalTwin({
       statusDrawing.texture.needsUpdate = true;
     };
     let lastStatusSecond = -1;
+    const refreshContactCache = () => {
+      contactById.clear();
+      contactRef.current.forEach((contact) => { contactById.set(contact.id, contact); });
+    };
+    refreshContactsRef.current = refreshContactCache;
+    refreshContactCache();
+
     const scratchPosition = new THREE.Vector3();
     const animate = () => {
       if (disposed) return;
       const mode = modeRef.current;
-      // Update the per-track cache only when React publishes a new contact snapshot.
-      contactRef.current.forEach((contact) => { contactById.set(contact.id, contact); });
       contactMeshes.forEach((group, id) => {
         const contact = contactById.get(id);
         const status = contact?.status;
@@ -465,7 +475,7 @@ export default function DigitalTwin({
         const second = Math.floor(elapsedRef.current);
         if (second !== lastStatusSecond) { drawStatus(elapsedRef.current); lastStatusSecond = second; }
         raycaster.setFromCamera(center, camera);
-        const hit = raycaster.intersectObjects(gazePickables.filter((object) => modeRef.current === "cardboard" ? object.parent?.parent === hudRoot || object.parent === hudRoot || contactById.has(String(object.parent?.userData.contactId)) : true), false)[0]?.object ?? null;
+        const hit = raycaster.intersectObjects(gazePickables, false)[0]?.object ?? null;
         if (hit !== gazeTargetRef.current) {
           gazeTargetRef.current = hit;
           gazeStartRef.current = hit ? performance.now() : 0;
@@ -530,6 +540,7 @@ export default function DigitalTwin({
       rendererRef.current = null;
       resizeRef.current = null;
       applyModeRef.current = null;
+      refreshContactsRef.current = null;
       recenterHudRef.current = null;
     };
   }, [config.environment, config.lighting, config.visibility, contactKey, reportAction]);
