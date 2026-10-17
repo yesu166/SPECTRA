@@ -53,6 +53,7 @@ export default function App() {
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [showPerformance, setShowPerformance] = useState(false);
   const [perf, setPerf] = useState({ fps: 0, simHz: 0, frameMs: 0 });
+  const performanceRef = useRef({ frames: 0, steps: 0, frameMsSum: 0, windowStart: 0 });
   const simulationHz = 30;
   const fixedStepSeconds = 1 / simulationHz;
   const eventsRef = useRef<SessionEvent[]>([]);
@@ -221,10 +222,11 @@ export default function App() {
     }
 
     let alive = true;
-    let frames = 0;
-    let simulationSteps = 0;
-    let measurementFrameElapsed = 0;
-    let lastPublishedAt = 0;
+    const measurement = performanceRef.current;
+    measurement.frames = 0;
+    measurement.steps = 0;
+    measurement.frameMsSum = 0;
+    measurement.windowStart = 0;
     const MAX_FRAME_DELTA = 0.1;
     const MAX_CATCH_UP_STEPS = 3;
 
@@ -254,22 +256,23 @@ export default function App() {
           accumulatorRef.current = Math.min(accumulatorRef.current, fixedStepSeconds * 0.5);
         }
       }
-      frames += 1;
-      measurementFrameElapsed += rawDelta;
-  
-      if (now - lastPublishedAt >= 500) {
-        const span = Math.max(0.001, (now - lastPublishedAt) / 1000);
+      measurement.frames += 1;
+      measurement.steps += stepsThisFrame;
+      measurement.frameMsSum += Math.max(0, now - (previous ?? now));
+      if (measurement.windowStart === 0) measurement.windowStart = now;
+      if (now - measurement.windowStart >= 500) {
+        const span = Math.max(0.001, (now - measurement.windowStart) / 1000);
         if (showPerformance) {
           setPerf({
-            fps: Math.round(frames / span),
-            simHz: Math.round(simulationSteps / span),
-            frameMs: Number((measurementFrameElapsed / Math.max(1, frames) * 1000).toFixed(1)),
+            fps: Math.round(measurement.frames / span),
+            simHz: Math.round(measurement.steps / span),
+            frameMs: Number((measurement.frameMsSum / Math.max(1, measurement.frames)).toFixed(1)),
           });
         }
-        frames = 0;
-        simulationSteps = 0;
-        measurementFrameElapsed = 0;
-        lastPublishedAt = now;
+        measurement.frames = 0;
+        measurement.steps = 0;
+        measurement.frameMsSum = 0;
+        measurement.windowStart = now;
       }
       frameRef.current = requestAnimationFrame(frame);
     };
