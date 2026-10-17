@@ -18,9 +18,7 @@ function loadSessions(): SessionSnapshot[] {
   try { const value = localStorage.getItem(STORAGE_KEY); return value ? JSON.parse(value) as SessionSnapshot[] : []; }
   catch { return []; }
 }
-function timeLabel(seconds: number) {
-  return `${Math.floor(seconds / 60).toString().padStart(2, "0")}${":"}${Math.floor(seconds % 60).toString().padStart(2, "0")}`;
-}
+function timeLabel(seconds: number) { return `${Math.floor(seconds / 60).toString().padStart(2, "0")}:${Math.floor(seconds % 60).toString().padStart(2, "0")}`; }
 
 export default function App() {
   const [config, setConfig] = useState<Config>(DEFAULT_CONFIG);
@@ -66,20 +64,14 @@ export default function App() {
     if (intervalRef.current !== null) window.clearInterval(intervalRef.current);
     intervalRef.current = null;
     setRunning(false);
-    tickRef.current = 0;
-    elapsedRef.current = 0;
-    eventCounter.current = 3;
-    setTick(0);
-    setElapsed(0);
+    tickRef.current = 0; elapsedRef.current = 0; eventCounter.current = 3;
+    setTick(0); setElapsed(0);
     const generated = generateEntities(cfg);
-    entitiesRef.current = generated;
-    setEntities(generated);
-    setObservations({});
+    entitiesRef.current = generated; setEntities(generated); setObservations({});
     setSelectedId(generated[0]?.id ?? null);
     setSessionStarted(new Date().toISOString());
     const log = initialEvents(cfg);
-    eventsRef.current = log;
-    setEvents(log);
+    eventsRef.current = log; setEvents(log);
     if (announce) setNotice(`NEW EXERCISE · ${cfg.scenarioId.replaceAll("-", " ").toUpperCase()}`);
   }, [initialEvents]);
 
@@ -87,14 +79,10 @@ export default function App() {
 
   const step = useCallback(() => {
     const cfg = configRef.current;
-    tickRef.current += 1;
-    elapsedRef.current += 1;
+    tickRef.current += 1; elapsedRef.current += 1;
     const currentTick = tickRef.current;
     const moved = moveEntities(entitiesRef.current, currentTick);
-    entitiesRef.current = moved;
-    setEntities(moved);
-    setTick(currentTick);
-    setElapsed(elapsedRef.current);
+    entitiesRef.current = moved; setEntities(moved); setTick(currentTick); setElapsed(elapsedRef.current);
     const nextObservations: Record<string, Observation> = {};
     moved.forEach((entity) => { nextObservations[entity.id] = getObservation(cfg, entity, currentTick); });
     setObservations(nextObservations);
@@ -136,8 +124,7 @@ export default function App() {
     const snapshot: SessionSnapshot = { id: `session-${Date.now()}`, startedAt: sessionStarted, config, duration: elapsedRef.current, events: eventsRef.current, entities: entitiesRef.current, observations, tick: tickRef.current };
     const next = [snapshot, ...loadSessions()].slice(0, 12);
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-      setSessions(next);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(next)); setSessions(next);
       record("SESSION", "Session saved locally", `${snapshot.events.length} events · duration ${timeLabel(snapshot.duration)}`, elapsedRef.current);
       setNotice("SESSION SAVED LOCALLY");
     } catch { setNotice("SAVE FAILED · BROWSER STORAGE MAY BE FULL"); }
@@ -147,15 +134,13 @@ export default function App() {
     if (intervalRef.current !== null) window.clearInterval(intervalRef.current);
     intervalRef.current = null; setRunning(false);
     setConfig(session.config); configRef.current = session.config;
-    eventsRef.current = session.events; setEvents(session.events);
-    eventCounter.current = session.events.length;
+    eventsRef.current = session.events; setEvents(session.events); eventCounter.current = session.events.length;
     setElapsed(session.duration); elapsedRef.current = session.duration;
     setTick(session.tick ?? session.duration); tickRef.current = session.tick ?? session.duration;
     const restoredEntities = session.entities ?? generateEntities(session.config);
     entitiesRef.current = restoredEntities; setEntities(restoredEntities);
-    const restoredObservations = session.observations ?? {};
-    setObservations(restoredObservations);
-    setSessionStarted(session.startedAt); setSelectedId(generated[0]?.id ?? null);
+    setObservations(session.observations ?? {});
+    setSessionStarted(session.startedAt); setSelectedId(restoredEntities[0]?.id ?? null);
     setNotice("SESSION LOADED · CONFIGURATION AND EVENT HISTORY RESTORED");
   };
 
@@ -212,7 +197,7 @@ export default function App() {
             <section className="panel twin-panel"><div className="panel-heading"><div><div className="eyebrow">VIEW 02 / DIGITAL TWIN</div><h2>Environment</h2></div><span className="view-tag"><Layers3 size={12}/> 3D VIEW</span></div><DigitalTwin entities={entities} config={config} observations={observations} selectedId={selectedId} onSelect={setSelectedId}/><div className="twin-footer"><span><span className="live-dot"/> Shared simulation state</span><span>LIGHTING: {config.lighting.toUpperCase()}</span><span>VIS: {config.visibility.toUpperCase()}</span></div></section>
           </div>
           <div className="lower-grid">
-            <section className="panel contact-panel"><div className="panel-heading"><div><div className="eyebrow">SYNTHETIC SENSOR FEED</div><h2>Contact register</h2></div><span className="count-pill">{entities.length} CONTACTS</span></div><div className="contact-table-wrap"><table className="contact-table"><thead><tr><th>CONTACT</th><th>OBSERVATION</th><th>CONF.</th><th>ALT.</th><th>SELECT</th></tr></thead><tbody>{entities.slice(0,8).map((entity) => {const obs=observations[entity.id];return <tr key={entity.id} className={selectedId===entity.id?"selected-row":""} onClick={()=>setSelectedId(entity.id)}><td><span className={`entity-dot ${obs?.status === "TRACK" ? "authorized" : obs?.status === "INTERMITTENT" ? "unknown" : "simulated-threat"}`}/><strong>{entity.id}</strong><small>{obs?.status === "TRACK" ? "TRACK OBSERVED" : obs?.status === "INTERMITTENT" ? "INTERMITTENT" : obs?.status === "UNOBSERVED" ? "NO OBSERVATION" : "AWAITING OBSERVATION"}</small></td><td><span className={`observation-pill ${obs?.status?.toLowerCase()??"pending"}`}>{obs?.status??"PENDING"}</span></td><td>{obs?`${obs.confidence}%`:"—"}</td><td>{entity.altitude} m</td><td><button className="mini-select" onClick={(event)=>{event.stopPropagation();setSelectedId(entity.id)}}>{selectedId===entity.id?<Check size={13}/>:<Eye size={13}/>}</button></td></tr>})}</tbody></table></div><div className="contact-footer"><span>SELECTION: {selectedId??"NONE"}</span><span>OBSERVATIONS ARE SIMULATED</span></div></section>
+            <section className="panel contact-panel"><div className="panel-heading"><div><div className="eyebrow">SYNTHETIC SENSOR FEED</div><h2>Contact register</h2></div><span className="count-pill">{entities.length} CONTACTS</span></div><div className="contact-table-wrap"><table className="contact-table"><thead><tr><th>CONTACT</th><th>OBSERVATION</th><th>CONF.</th><th>ALT.</th><th>SELECT</th></tr></thead><tbody>{entities.slice(0,8).map((entity) => {const obs=observations[entity.id];return <tr key={entity.id} className={selectedId===entity.id?"selected-row":""} onClick={()=>setSelectedId(entity.id)}><td><span className={`entity-dot ${obs?.status==="TRACK"?"authorized":obs?.status==="INTERMITTENT"?"unknown":"simulated-threat"}`}/><strong>{entity.id}</strong><small>{obs?.status==="TRACK"?"TRACK OBSERVED":obs?.status==="INTERMITTENT"?"INTERMITTENT":obs?.status==="UNOBSERVED"?"NO OBSERVATION":"AWAITING OBSERVATION"}</small></td><td><span className={`observation-pill ${obs?.status?.toLowerCase()??"pending"}`}>{obs?.status??"PENDING"}</span></td><td>{obs?`${obs.confidence}%`:"—"}</td><td>{entity.altitude} m</td><td><button className="mini-select" onClick={(event)=>{event.stopPropagation();setSelectedId(entity.id)}}>{selectedId===entity.id?<Check size={13}/>:<Eye size={13}/>}</button></td></tr>})}</tbody></table></div><div className="contact-footer"><span>SELECTION: {selectedId??"NONE"}</span><span>OBSERVATIONS ARE SIMULATED</span></div></section>
             <section className="panel detail-panel"><div className="panel-heading"><div><div className="eyebrow">CONTACT INSPECTOR</div><h2>Observation details</h2></div><Crosshair size={17} className="muted-icon"/></div>{selected?<div className="detail-content"><div className="detail-title"><span className="detail-symbol"><Target size={19}/></span><div><strong>{selected.id}</strong><span>Sensor contact · identity not confirmed</span></div></div><div className="detail-stats"><div><span>ALTITUDE</span><strong>{selected.altitude} m</strong></div><div><span>OBSERVATION</span><strong>{selectedObservation?.status??"PENDING"}</strong></div><div><span>CONFIDENCE</span><strong>{selectedObservation?`${selectedObservation.confidence}%`:"—"}</strong></div></div><div className="detail-note"><div className="note-icon"><Waves size={14}/></div><p>{selectedObservation?.note??"No observation recorded yet. Start the exercise to populate the synthetic feed."}</p></div><div className="evidence-label">AVAILABLE EVIDENCE</div><div className="evidence-row"><span>Source</span><strong>Simulated sensor</strong></div><div className="evidence-row"><span>Reported identity</span><strong>{selectedObservation?.status==="TRACK"?"Unconfirmed by sensor":"Insufficient observation"}</strong></div><div className="evidence-row"><span>Scenario label</span><strong>Hidden from operator view</strong></div></div>:<div className="empty-state">Select a contact to inspect its observations.</div>}</section>
           </div>
           <div className="event-banner"><div className="banner-icon"><Activity size={15}/></div><span>{notice}</span><span className="banner-time">{timeLabel(elapsed)} SIM TIME</span></div>
