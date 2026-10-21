@@ -100,3 +100,7 @@ This is an engineering prototype, not a validated training product. Its sensor m
 ## Contribution and validation
 
 Issues and pull requests are welcome. Every change should pass the GitHub Actions workflow before it is treated as verified. Student testing can establish software consistency and usability, but claims about real operator performance require qualified review and appropriate evaluation.
+
+## Project brief
+
+For the project's purpose, scope, current maturity, proposed roadmap, limitations, and collaboration opportunities, see [PROJECT_BRIEF.md](PROJECT_BRIEF.md).
